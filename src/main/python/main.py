@@ -42,6 +42,12 @@ class DimWidget(QGroupBox):
     def __init__(self, title, xName='X', yName='Y', parent=None):
         super(DimWidget, self).__init__(parent)
 
+        self.x = 0
+        self.y = 0
+        self.xMax = 0
+        self.yMax = 0
+        self.pointsPerUnit = 1
+
         self.setTitle(title)
 
         self.xLabel = QLabel(xName + ':')
@@ -62,6 +68,31 @@ class DimWidget(QGroupBox):
         layout.addWidget(self.link, 1, 2, 2, 1)
         layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
         self.setLayout(layout)
+
+    def _updateSpinners(self):
+        self.xSpin.setMaximum(self.xMax / self.pointsPerUnit)
+        self.xSpin.setValue(self.x / self.pointsPerUnit)
+        self.xSpin.setSingleStep(1 / self.pointsPerUnit)
+        self.ySpin.setMaximum(self.yMax / self.pointsPerUnit)
+        self.ySpin.setSingleStep(1 / self.pointsPerUnit)
+        self.ySpin.setValue(self.y / self.pointsPerUnit)
+
+    def setValue(self, x, y):
+        self.x = x
+        self.y = y
+        self._updateSpinners()
+
+    def setMaximum(self, xMax, yMax):
+        self.xMax = xMax
+        self.yMax = yMax
+        self._updateSpinners()
+
+    def setUnits(self, units):
+        if units == 'pt':
+            self.pointsPerUnit = 1
+        elif units == 'in':
+            self.pointsPerUnit = 72
+        self._updateSpinners()
 
 class PreviewWidget(QLabel):
     def __init__(self, parent=None):
@@ -90,6 +121,10 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
+        self.pdf = None
+        self.pdfFileName = None
+        self.pageNumber = 1
+
         self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
         self.openAction.triggered.connect(self.openFileDialog)
 
@@ -114,7 +149,8 @@ class MainWindow(QMainWindow):
         self.pageNumSpin = QSpinBox()
         self.pageNumSpin.setMinimum(1)
         self.pageNumSpin.setMaximum(1)
-        self.pageNumSpin.valueChanged.connect(self.onPageNumSpinChanged)
+        self.pageNumSpin.setValue(self.pageNumber)
+        self.pageNumSpin.valueChanged.connect(self.setPageNumber)
         pageNumBox = QGroupBox()
         pageNumBox.setTitle('Page Number')
         layout = QHBoxLayout()
@@ -123,7 +159,9 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(pageNumBox)
 
         # Scale widget
-        self.scale = DimWidget('Size', 'X', 'Y')
+        self.scale = DimWidget('Output Size', 'X', 'Y')
+        # No one should need more than a mile. :-)
+        self.scale.setMaximum(72 * 12 * 5280, 72 * 12 * 5280)
         formLayout.addWidget(self.scale)
 
         # A dummy padding widget
@@ -144,15 +182,22 @@ class MainWindow(QMainWindow):
         fileMenu.addSeparator()
         fileMenu.addAction(self.quitAction)
 
-    def onPageNumSpinChanged(self, page):
-        # The spinner is 1-indexed but everything else is zero-indexed
-        self.preview.setPageNumber(page)
+    def updatePageSize(self):
+        box = self.pdf.getPage(self.pageNumber - 1).mediaBox
+        self.scale.setValue(box.upperRight[0], box.upperRight[1])
 
-    def loadPDF(self, fname):
-        self.filname = fname
-        pdf = PdfFileReader(fname)
-        self.preview.setPDFPath(fname)
-        self.pageNumSpin.setMaximum(pdf.getNumPages())
+    def setPageNumber(self, pageNumber):
+        if self.pageNumber != pageNumber:
+            self.pageNumber = pageNumber
+            self.preview.setPageNumber(pageNumber)
+            self.updatePageSize()
+
+    def loadPDF(self, fileName):
+        self.pdfFileName = fileName
+        self.pdf = PdfFileReader(fileName)
+        self.preview.setPDFPath(fileName)
+        self.pageNumSpin.setMaximum(self.pdf.getNumPages())
+        self.updatePageSize()
 
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', None, '*.pdf')

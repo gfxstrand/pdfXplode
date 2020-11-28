@@ -100,8 +100,6 @@ class MainWindow(QMainWindow):
 
         # Preview widget
         self.preview = PreviewWidget()
-        self.preview.setPDFPath('/home/jason/resume.pdf')
-        self.preview.setPageNumber(0)
         hLayout.addWidget(self.preview)
 
         # A parent widget to contain all the knobs
@@ -148,5 +146,6 @@ if __name__ == '__main__':
     menuBar.addAction(openAct)
 
     window = MainWindow()
+    window.loadPDF('/home/jason/resume.pdf')
     window.show()
     sys.exit(appctxt.app.exec_())

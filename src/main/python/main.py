@@ -39,8 +39,8 @@ from PyQt5.QtWidgets import (
 )
 import sys
 
-class DimWidget(QGroupBox):
-    def __init__(self, title, xName='X', yName='Y', parent=None):
+class DimWidget(QWidget):
+    def __init__(self, xName='X', yName='Y', parent=None):
         super(DimWidget, self).__init__(parent)
 
         self.x = 0
@@ -52,8 +52,6 @@ class DimWidget(QGroupBox):
         self.units = 'percent'
         self.xPointsPerUnit = 1
         self.yPointsPerUnit = 1
-
-        self.setTitle(title)
 
         self.xLabel = QLabel(xName + ':')
         self.yLabel = QLabel(yName + ':')
@@ -73,6 +71,7 @@ class DimWidget(QGroupBox):
         self.unitsBox.currentTextChanged.connect(self.setUnits)
 
         layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.xLabel, 0, 0, 2, 1)
         layout.addWidget(self.xSpin, 0, 1, 2, 1)
         layout.addWidget(self.yLabel, 2, 0, 2, 1)
@@ -185,10 +184,15 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(pageNumBox)
 
         # Scale widget
-        self.scale = DimWidget('Output Size', 'X', 'Y')
+        self.scale = DimWidget('X', 'Y')
         # No one should need more than a mile. :-)
         self.scale.setMaximum(72 * 12 * 5280, 72 * 12 * 5280)
-        formLayout.addWidget(self.scale)
+        scaleBox = QGroupBox()
+        scaleBox.setTitle('Output Size')
+        layout = QVBoxLayout()
+        layout.addWidget(self.scale)
+        scaleBox.setLayout(layout)
+        formLayout.addWidget(scaleBox)
 
         # A dummy padding widget
         spacer = QWidget()

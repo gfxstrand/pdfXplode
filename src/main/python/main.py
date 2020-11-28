@@ -17,6 +17,7 @@ from fbs_runtime.application_context.PyQt5 import ApplicationContext
 import pdf2image
 import PIL
 import PIL.ImageQt
+from PyPDF2 import PdfFileReader
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
@@ -31,6 +32,7 @@ from PyQt5.QtWidgets import (
     QMenuBar,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget
 )
@@ -65,12 +67,12 @@ class PreviewWidget(QLabel):
     def __init__(self, parent=None):
         super(PreviewWidget, self).__init__(parent)
         self.path = None
-        self.page = 0
+        self.page = 1
 
     def _reload(self):
         images = pdf2image.convert_from_path(self.path, dpi=100,
-                                            first_page=self.page,
-                                            last_page=self.page)
+                                             first_page=self.page,
+                                             last_page=self.page)
         self.image = PIL.ImageQt.ImageQt(images[0])
         self.setPixmap(QPixmap.fromImage(self.image))
 
@@ -108,6 +110,18 @@ class MainWindow(QMainWindow):
         formWidget.setLayout(formLayout)
         hLayout.addWidget(formWidget)
 
+        # Page number spinner
+        self.pageNumSpin = QSpinBox()
+        self.pageNumSpin.setMinimum(1)
+        self.pageNumSpin.setMaximum(1)
+        self.pageNumSpin.valueChanged.connect(self.onPageNumSpinChanged)
+        pageNumBox = QGroupBox()
+        pageNumBox.setTitle('Page Number')
+        layout = QHBoxLayout()
+        layout.addWidget(self.pageNumSpin)
+        pageNumBox.setLayout(layout)
+        formLayout.addWidget(pageNumBox)
+
         # Scale widget
         self.scale = DimWidget('Size', 'X', 'Y')
         formLayout.addWidget(self.scale)
@@ -130,9 +144,15 @@ class MainWindow(QMainWindow):
         fileMenu.addSeparator()
         fileMenu.addAction(self.quitAction)
 
+    def onPageNumSpinChanged(self, page):
+        # The spinner is 1-indexed but everything else is zero-indexed
+        self.preview.setPageNumber(page)
+
     def loadPDF(self, fname):
         self.filname = fname
+        pdf = PdfFileReader(fname)
         self.preview.setPDFPath(fname)
+        self.pageNumSpin.setMaximum(pdf.getNumPages())
 
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', None, '*.pdf')

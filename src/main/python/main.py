@@ -22,6 +22,7 @@ from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QGridLayout,
@@ -44,9 +45,13 @@ class DimWidget(QGroupBox):
 
         self.x = 0
         self.y = 0
+        self.xBase = 1
+        self.yBase = 1
         self.xMax = 0
         self.yMax = 0
-        self.pointsPerUnit = 1
+        self.units = 'percent'
+        self.xPointsPerUnit = 1
+        self.yPointsPerUnit = 1
 
         self.setTitle(title)
 
@@ -59,6 +64,14 @@ class DimWidget(QGroupBox):
         self.link.setCheckable(True)
         self.link.setChecked(True)
 
+        self.unitsBox = QComboBox()
+        self.unitsBox.setEditable(False)
+        self.unitsBox.addItem('inches')
+        self.unitsBox.addItem('percent')
+        self.unitsBox.addItem('points')
+        self.unitsBox.setCurrentText(self.units)
+        self.unitsBox.currentTextChanged.connect(self.setUnits)
+
         layout = QGridLayout()
         layout.addWidget(self.xLabel, 0, 0, 2, 1)
         layout.addWidget(self.xSpin, 0, 1, 2, 1)
@@ -67,15 +80,26 @@ class DimWidget(QGroupBox):
         layout.addWidget(QLabel('↰'), 0, 2, 1, 1)
         layout.addWidget(self.link, 1, 2, 2, 1)
         layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
+        layout.addWidget(self.unitsBox, 4, 1, 1, 2)
         self.setLayout(layout)
 
     def _updateSpinners(self):
-        self.xSpin.setMaximum(self.xMax / self.pointsPerUnit)
-        self.xSpin.setValue(self.x / self.pointsPerUnit)
-        self.xSpin.setSingleStep(1 / self.pointsPerUnit)
-        self.ySpin.setMaximum(self.yMax / self.pointsPerUnit)
-        self.ySpin.setSingleStep(1 / self.pointsPerUnit)
-        self.ySpin.setValue(self.y / self.pointsPerUnit)
+        if self.units == 'inches':
+            self.xPointsPerUnit = 72
+            self.yPointsPerUnit = 72
+        elif self.units == 'percent':
+            self.xPointsPerUnit = self.xBase / 100
+            self.yPointsPerUnit = self.yBase / 100
+        elif self.units == 'points':
+            self.xPointsPerUnit = 1
+            self.yPointsPerUnit = 1
+
+        self.xSpin.setMaximum(self.xMax / self.xPointsPerUnit)
+        self.xSpin.setValue(self.x / self.xPointsPerUnit)
+        self.xSpin.setSingleStep(1 / self.xPointsPerUnit)
+        self.ySpin.setMaximum(self.yMax / self.yPointsPerUnit)
+        self.ySpin.setSingleStep(1 / self.yPointsPerUnit)
+        self.ySpin.setValue(self.y / self.yPointsPerUnit)
 
     def setValue(self, x, y):
         self.x = x
@@ -87,11 +111,13 @@ class DimWidget(QGroupBox):
         self.yMax = yMax
         self._updateSpinners()
 
+    def setBaseValue(self, xBase, yBase):
+        self.xBase = xBase
+        self.yBase = yBase
+        self._updateSpinners()
+
     def setUnits(self, units):
-        if units == 'pt':
-            self.pointsPerUnit = 1
-        elif units == 'in':
-            self.pointsPerUnit = 72
+        self.units = units
         self._updateSpinners()
 
 class PreviewWidget(QLabel):
@@ -184,6 +210,7 @@ class MainWindow(QMainWindow):
 
     def updatePageSize(self):
         box = self.pdf.getPage(self.pageNumber - 1).mediaBox
+        self.scale.setBaseValue(box.upperRight[0], box.upperRight[1])
         self.scale.setValue(box.upperRight[0], box.upperRight[1])
 
     def setPageNumber(self, pageNumber):

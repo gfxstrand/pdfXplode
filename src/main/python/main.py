@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import (
     QMenuBar,
     QPushButton,
     QSizePolicy,
+    QVBoxLayout,
     QWidget
 )
 import sys
@@ -95,22 +96,31 @@ class MainWindow(QMainWindow):
 
         self._setupMenus()
 
+        hLayout = QHBoxLayout()
+
+        # Preview widget
         self.preview = PreviewWidget()
         self.preview.setPDFPath('/home/jason/resume.pdf')
         self.preview.setPageNumber(0)
+        hLayout.addWidget(self.preview)
 
+        # A parent widget to contain all the knobs
+        formWidget = QWidget()
+        formLayout = QVBoxLayout()
+        formWidget.setLayout(formLayout)
+        hLayout.addWidget(formWidget)
+
+        # Scale widget
         self.scale = DimWidget('Size', 'X', 'Y')
-        layout = QGridLayout()
-        layout.addWidget(self.preview, 0, 0, 2, 1)
-        layout.addWidget(self.scale, 0, 1)
+        formLayout.addWidget(self.scale)
 
+        # A dummy padding widget
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        formLayout.addWidget(spacer)
 
-        layout.addWidget(self.scale, 0, 1)
-        layout.addWidget(spacer, 1, 1)
         wid = QWidget()
-        wid.setLayout(layout)
+        wid.setLayout(hLayout)
         self.setCentralWidget(wid)
 
         self.setWindowTitle('pdfXplode')

@@ -14,12 +14,129 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
-from PyQt5.QtWidgets import QMainWindow
+import pdf2image
+import PIL
+import PIL.ImageQt
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenuBar,
+    QPushButton,
+    QSizePolicy,
+    QWidget
+)
 import sys
+
+class DimWidget(QGroupBox):
+    def __init__(self, title, xName='X', yName='Y', parent=None):
+        super(DimWidget, self).__init__(parent)
+
+        self.setTitle(title)
+
+        self.xLabel = QLabel(xName + ':')
+        self.yLabel = QLabel(yName + ':')
+        self.xSpin = QDoubleSpinBox()
+        self.ySpin = QDoubleSpinBox()
+
+        self.link = QPushButton('Link')
+        self.link.setCheckable(True)
+        self.link.setChecked(True)
+
+        layout = QGridLayout()
+        layout.addWidget(self.xLabel, 0, 0, 2, 1)
+        layout.addWidget(self.xSpin, 0, 1, 2, 1)
+        layout.addWidget(self.yLabel, 2, 0, 2, 1)
+        layout.addWidget(self.ySpin, 2, 1, 2, 1)
+        layout.addWidget(QLabel('↰'), 0, 2, 1, 1)
+        layout.addWidget(self.link, 1, 2, 2, 1)
+        layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
+        self.setLayout(layout)
+
+class PreviewWidget(QLabel):
+    def __init__(self, parent=None):
+        super(PreviewWidget, self).__init__(parent)
+        self.path = None
+        self.page = 0
+
+    def _reload(self):
+        images = pdf2image.convert_from_path(self.path, dpi=100,
+                                            first_page=self.page,
+                                            last_page=self.page)
+        self.image = PIL.ImageQt.ImageQt(images[0])
+        self.setPixmap(QPixmap.fromImage(self.image))
+
+    def setPDFPath(self, path):
+        if self.path != path:
+            self.path = path
+            self._reload()
+
+    def setPageNumber(self, page):
+        if self.page != page:
+            self.page = page
+            self._reload()
+
+class MainWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super(MainWindow, self).__init__(parent)
+
+        self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
+        self.openAction.triggered.connect(self.openFileDialog)
+
+        self.quitAction = QAction(QIcon.fromTheme('application-exit'), '&Quit')
+        self.quitAction.triggered.connect(self.close)
+
+        self._setupMenus()
+
+        self.preview = PreviewWidget()
+        self.preview.setPDFPath('/home/jason/resume.pdf')
+        self.preview.setPageNumber(0)
+
+        self.scale = DimWidget('Size', 'X', 'Y')
+        layout = QGridLayout()
+        layout.addWidget(self.preview, 0, 0, 2, 1)
+        layout.addWidget(self.scale, 0, 1)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        layout.addWidget(self.scale, 0, 1)
+        layout.addWidget(spacer, 1, 1)
+        wid = QWidget()
+        wid.setLayout(layout)
+        self.setCentralWidget(wid)
+
+        self.setWindowTitle('pdfXplode')
+
+    def _setupMenus(self):
+        menuBar = self.menuBar()
+        fileMenu = menuBar.addMenu('&File')
+        fileMenu.addAction(self.openAction)
+        fileMenu.addSeparator()
+        fileMenu.addAction(self.quitAction)
+
+    def loadPDF(self, fname):
+        self.filname = fname
+        self.preview.setPDFPath(fname)
+
+    def openFileDialog(self):
+        fname = QFileDialog.getOpenFileName(self, 'Open PDF', None, '*.pdf')
+        self.loadPDF(fname[0])
 
 if __name__ == '__main__':
     appctxt = ApplicationContext()
-    window = QMainWindow()
-    window.setWindowTitle("Hello World!")
+
+    menuBar = QMenuBar();
+    openAct = QAction('&Open')
+    menuBar.addAction(openAct)
+
+    window = MainWindow()
     window.show()
     sys.exit(appctxt.app.exec_())

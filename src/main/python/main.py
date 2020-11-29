@@ -40,17 +40,27 @@ from PyQt5.QtWidgets import (
 )
 import sys
 
+MILE_IN_POINTS = 72 * 12 * 5280
+
+def pointsPerUnit(unit, base):
+    if unit == 'inches':
+        return 72
+    elif unit == 'percent':
+        return base / 100
+    elif unit == 'points':
+        return 1
+
 class UnitsComboBox(QComboBox):
     valueChanged = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, percent=True):
         super(UnitsComboBox, self).__init__(parent)
 
         self.setEditable(False)
         self.addItem('inches')
-        self.addItem('percent')
+        if percent:
+            self.addItem('percent')
         self.addItem('points')
-        self.setCurrentText('percent')
         self.currentTextChanged.connect(self.valueChanged)
 
 class ScaledSpinBox(QWidget):
@@ -190,16 +200,9 @@ class DimWidget(QWidget):
         self.xBase = xBase
         self.yBase = yBase
 
-    def setUnits(self, units):
-        if units == 'inches':
-            self.xSpin.setScale(72)
-            self.ySpin.setScale(72)
-        elif units == 'percent':
-            self.xSpin.setScale(self.xBase / 100)
-            self.ySpin.setScale(self.yBase / 100)
-        elif units == 'points':
-            self.xSpin.setScale(1)
-            self.ySpin.setScale(1)
+    def setUnits(self, unit):
+        self.xSpin.setScale(pointsPerUnit(unit, self.xBase))
+        self.ySpin.setScale(pointsPerUnit(unit, self.yBase))
 
 class PreviewWidget(QLabel):
     def __init__(self, parent=None):
@@ -282,8 +285,7 @@ class MainWindow(QMainWindow):
 
         # Scale widget
         self.scale = DimWidget('X', 'Y')
-        # No one should need more than a mile. :-)
-        self.scale.setMaximums(72 * 12 * 5280, 72 * 12 * 5280)
+        self.scale.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.scaleUnits = UnitsComboBox()
         self.scaleUnits.valueChanged.connect(self.scale.setUnits)
         scaleBox = QGroupBox()
@@ -293,6 +295,29 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.scaleUnits)
         scaleBox.setLayout(layout)
         formLayout.addWidget(scaleBox)
+
+        # Output page size and margin
+        self.outPageSize = DimWidget(compact=True)
+        self.outPageSize.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
+        self.outPageSize.setValues(8.5 * 72, 11 * 72)
+        self.outPageMargin = DimWidget(compact=True)
+        self.outPageMargin.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
+        self.outPageMargin.setValues(0.5 * 72, 0.5 * 72)
+        self.outPageUnits = UnitsComboBox(percent=False)
+        self.outPageSize.setUnits(self.outPageUnits.currentText())
+        self.outPageUnits.valueChanged.connect(self.outPageSize.setUnits)
+        self.outPageMargin.setUnits(self.outPageUnits.currentText())
+        self.outPageUnits.valueChanged.connect(self.outPageMargin.setUnits)
+        outPageBox = QGroupBox()
+        outPageBox.setTitle('Output Page')
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel('Size:'))
+        layout.addWidget(self.outPageSize)
+        layout.addWidget(QLabel('Margin:'))
+        layout.addWidget(self.outPageMargin)
+        layout.addWidget(self.outPageUnits)
+        outPageBox.setLayout(layout)
+        formLayout.addWidget(outPageBox)
 
         # A dummy padding widget
         spacer = QWidget()

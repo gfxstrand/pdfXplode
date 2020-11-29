@@ -337,7 +337,7 @@ class MainWindow(QMainWindow):
         fileMenu.addSeparator()
         fileMenu.addAction(self.quitAction)
 
-    def updatePageSize(self):
+    def _updatePageSize(self):
         box = self.pdf.getPage(self.pageNumber - 1).mediaBox
         self.cropOrig.setMaximums(box.upperRight[0], box.upperRight[1])
         self.cropOrig.setBaseValues(box.upperRight[0], box.upperRight[1])
@@ -355,14 +355,14 @@ class MainWindow(QMainWindow):
         if self.pageNumber != pageNumber:
             self.pageNumber = pageNumber
             self.preview.setPageNumber(pageNumber)
-            self.updatePageSize()
+            self._updatePageSize()
 
     def loadPDF(self, fileName):
         self.pdfFileName = fileName
         self.pdf = PdfFileReader(fileName)
         self.preview.setPDFPath(fileName)
         self.pageNumSpin.setMaximum(self.pdf.getNumPages())
-        self.updatePageSize()
+        self._updatePageSize()
 
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', None, '*.pdf')

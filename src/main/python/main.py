@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
         self.cropUnits.valueChanged.connect(self.cropOrig.setUnits)
         self.cropUnits.valueChanged.connect(self.cropDim.setUnits)
         cropBox = QGroupBox()
-        cropBox.setTitle('Crop')
+        cropBox.setTitle('Input Crop')
         layout = QVBoxLayout()
         layout.addWidget(self.cropOrig)
         layout.addWidget(self.cropDim)

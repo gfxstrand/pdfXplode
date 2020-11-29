@@ -365,8 +365,9 @@ class MainWindow(QMainWindow):
         self._updatePageSize()
 
     def openFileDialog(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open PDF', None, '*.pdf')
-        self.loadPDF(fname[0])
+        fname = QFileDialog.getOpenFileName(self, 'Open PDF', filter='*.pdf')
+        if fname and fname[0]:
+            self.loadPDF(fname[0])
 
 if __name__ == '__main__':
     appctxt = ApplicationContext()

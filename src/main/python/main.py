@@ -184,6 +184,17 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(pageNumBox)
 
         # Scale widget
+        self.cropOrig = DimWidget('X', 'Y')
+        self.cropDim = DimWidget('Width', 'Height')
+        cropBox = QGroupBox()
+        cropBox.setTitle('Crop')
+        layout = QVBoxLayout()
+        layout.addWidget(self.cropOrig)
+        layout.addWidget(self.cropDim)
+        cropBox.setLayout(layout)
+        formLayout.addWidget(cropBox)
+
+        # Scale widget
         self.scale = DimWidget('X', 'Y')
         # No one should need more than a mile. :-)
         self.scale.setMaximum(72 * 12 * 5280, 72 * 12 * 5280)
@@ -214,6 +225,12 @@ class MainWindow(QMainWindow):
 
     def updatePageSize(self):
         box = self.pdf.getPage(self.pageNumber - 1).mediaBox
+        self.cropOrig.setMaximum(box.upperRight[0], box.upperRight[1])
+        self.cropOrig.setBaseValue(box.upperRight[0], box.upperRight[1])
+        self.cropOrig.setValue(0, 0)
+        self.cropDim.setMaximum(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setBaseValue(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setValue(box.upperRight[0], box.upperRight[1])
         self.scale.setBaseValue(box.upperRight[0], box.upperRight[1])
         self.scale.setValue(box.upperRight[0], box.upperRight[1])
 

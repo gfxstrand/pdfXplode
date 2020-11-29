@@ -53,76 +53,153 @@ class UnitsComboBox(QComboBox):
         self.setCurrentText('percent')
         self.currentTextChanged.connect(self.valueChanged)
 
-class DimWidget(QWidget):
-    def __init__(self, xName='X', yName='Y', parent=None):
-        super(DimWidget, self).__init__(parent)
+class ScaledSpinBox(QWidget):
+    valueChanged = pyqtSignal(float)
 
-        self.x = 0
-        self.y = 0
-        self.xBase = 1
-        self.yBase = 1
-        self.xMax = 0
-        self.yMax = 0
-        self.units = 'percent'
-        self.xPointsPerUnit = 1
-        self.yPointsPerUnit = 1
+    def __init__(self, parent=None):
+        super(ScaledSpinBox, self).__init__(parent)
 
-        self.xLabel = QLabel(xName + ':')
-        self.yLabel = QLabel(yName + ':')
-        self.xSpin = QDoubleSpinBox()
-        self.ySpin = QDoubleSpinBox()
+        self._raw = QDoubleSpinBox()
+        self._raw.valueChanged.connect(self._rawValueChanged)
+        self._updating = False
+        self._scale = 1
 
-        self.link = QPushButton('Link')
-        self.link.setCheckable(True)
-        self.link.setChecked(True)
-
-        layout = QGridLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.xLabel, 0, 0, 2, 1)
-        layout.addWidget(self.xSpin, 0, 1, 2, 1)
-        layout.addWidget(self.yLabel, 2, 0, 2, 1)
-        layout.addWidget(self.ySpin, 2, 1, 2, 1)
-        layout.addWidget(QLabel('↰'), 0, 2, 1, 1)
-        layout.addWidget(self.link, 1, 2, 2, 1)
-        layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
+        layout.addWidget(self._raw)
         self.setLayout(layout)
 
-    def _updateSpinners(self):
-        if self.units == 'inches':
-            self.xPointsPerUnit = 72
-            self.yPointsPerUnit = 72
-        elif self.units == 'percent':
-            self.xPointsPerUnit = self.xBase / 100
-            self.yPointsPerUnit = self.yBase / 100
-        elif self.units == 'points':
-            self.xPointsPerUnit = 1
-            self.yPointsPerUnit = 1
+    def _rawValueChanged(self, rawValue):
+        if not self._updating:
+            self.valueChanged.emit(rawValue * self._scale)
 
-        self.xSpin.setMaximum(self.xMax / self.xPointsPerUnit)
-        self.xSpin.setValue(self.x / self.xPointsPerUnit)
-        self.xSpin.setSingleStep(1 / self.xPointsPerUnit)
-        self.ySpin.setMaximum(self.yMax / self.yPointsPerUnit)
-        self.ySpin.setSingleStep(1 / self.yPointsPerUnit)
-        self.ySpin.setValue(self.y / self.yPointsPerUnit)
+    def minimum(self):
+        return self._raw.minimum() * self._scale
 
-    def setValue(self, x, y):
-        self.x = x
-        self.y = y
-        self._updateSpinners()
+    def setMinimum(self, value):
+        self._raw.setMinimum(value / self._scale)
 
-    def setMaximum(self, xMax, yMax):
-        self.xMax = xMax
-        self.yMax = yMax
-        self._updateSpinners()
+    def maximum(self):
+        return self._raw.maximum() * self._scale
 
-    def setBaseValue(self, xBase, yBase):
+    def setMaximum(self, value):
+        self._raw.setMaximum(value / self._scale)
+
+    def value(self):
+        return self._raw.value() * self._scale
+
+    def setValue(self, value):
+        self._raw.setValue(value / self._scale)
+
+    def singleStep(self):
+        return self._raw.singleStep() * self._scale
+
+    def setSingleStep(self, step):
+        self._raw.setSingleStep(step / self._scale)
+
+    def scale(self):
+        return self._scale
+
+    def setScale(self, scale):
+        mini = self.minimum()
+        maxi = self.maximum()
+        step = self.singleStep()
+        value = self.value()
+        self.updating = True
+        self._scale = scale
+        self.setMinimum(mini)
+        self.setMaximum(maxi)
+        self.setSingleStep(step)
+        self.setValue(value)
+        self.updating = False
+
+class DimWidget(QWidget):
+    valueChanged = pyqtSignal(float, float)
+
+    def __init__(self, xName='X', yName='Y', compact=False, parent=None):
+        super(DimWidget, self).__init__(parent)
+
+        self._updating = False
+
+        self.xBase = 1
+        self.yBase = 1
+
+        self.xSpin = ScaledSpinBox()
+        self.xSpin.valueChanged.connect(self._xChanged)
+        self.ySpin = ScaledSpinBox()
+        self.ySpin.valueChanged.connect(self._yChanged)
+        self.link = None
+
+        if compact:
+            layout = QHBoxLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(self.xSpin)
+            layout.addWidget(QLabel('x'))
+            layout.addWidget(self.ySpin)
+            self.setLayout(layout)
+        else:
+            self.link = QPushButton('Link')
+            self.link.setCheckable(True)
+            self.link.setChecked(True)
+
+            layout = QGridLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.addWidget(QLabel(xName + ':'), 0, 0, 2, 1)
+            layout.addWidget(self.xSpin, 0, 1, 2, 1)
+            layout.addWidget(QLabel(yName + ':'), 2, 0, 2, 1)
+            layout.addWidget(self.ySpin, 2, 1, 2, 1)
+            layout.addWidget(QLabel('↰'), 0, 2, 1, 1)
+            layout.addWidget(self.link, 1, 2, 2, 1)
+            layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
+            self.setLayout(layout)
+
+    def _xChanged(self, x):
+        if self._updating:
+            return
+
+        if self.link and self.link.isChecked():
+            self._updating = True
+            self.ySpin.setValue(x * (self.yBase / self.xBase))
+            self._updating = False
+
+        self.valueChanged.emit(x, self.ySpin.value())
+
+    def _yChanged(self, y):
+        if self._updating:
+            return
+
+        if self.link and self.link.isChecked():
+            self._updating = True
+            self.xSpin.setValue(y * (self.xBase / self.yBase))
+            self._updating = False
+
+        self.valueChanged.emit(self.xSpin.value(), y)
+
+    def values(self):
+        return self.xSpin.value(), self.ySpin.value()
+
+    def setValues(self, x, y):
+        self.xSpin.setValue(x)
+        self.ySpin.setValue(y)
+
+    def setMaximums(self, xMax, yMax):
+        self.xSpin.setMaximum(xMax)
+        self.ySpin.setMaximum(yMax)
+
+    def setBaseValues(self, xBase, yBase):
         self.xBase = xBase
         self.yBase = yBase
-        self._updateSpinners()
 
     def setUnits(self, units):
-        self.units = units
-        self._updateSpinners()
+        if units == 'inches':
+            self.xSpin.setScale(72)
+            self.ySpin.setScale(72)
+        elif units == 'percent':
+            self.xSpin.setScale(self.xBase / 100)
+            self.ySpin.setScale(self.yBase / 100)
+        elif units == 'points':
+            self.xSpin.setScale(1)
+            self.ySpin.setScale(1)
 
 class PreviewWidget(QLabel):
     def __init__(self, parent=None):
@@ -206,7 +283,7 @@ class MainWindow(QMainWindow):
         # Scale widget
         self.scale = DimWidget('X', 'Y')
         # No one should need more than a mile. :-)
-        self.scale.setMaximum(72 * 12 * 5280, 72 * 12 * 5280)
+        self.scale.setMaximums(72 * 12 * 5280, 72 * 12 * 5280)
         self.scaleUnits = UnitsComboBox()
         self.scaleUnits.valueChanged.connect(self.scale.setUnits)
         scaleBox = QGroupBox()
@@ -237,14 +314,17 @@ class MainWindow(QMainWindow):
 
     def updatePageSize(self):
         box = self.pdf.getPage(self.pageNumber - 1).mediaBox
-        self.cropOrig.setMaximum(box.upperRight[0], box.upperRight[1])
-        self.cropOrig.setBaseValue(box.upperRight[0], box.upperRight[1])
-        self.cropOrig.setValue(0, 0)
-        self.cropDim.setMaximum(box.upperRight[0], box.upperRight[1])
-        self.cropDim.setBaseValue(box.upperRight[0], box.upperRight[1])
-        self.cropDim.setValue(box.upperRight[0], box.upperRight[1])
-        self.scale.setBaseValue(box.upperRight[0], box.upperRight[1])
-        self.scale.setValue(box.upperRight[0], box.upperRight[1])
+        self.cropOrig.setMaximums(box.upperRight[0], box.upperRight[1])
+        self.cropOrig.setBaseValues(box.upperRight[0], box.upperRight[1])
+        self.cropOrig.setValues(0, 0)
+        self.cropOrig.setUnits(self.cropUnits.currentText())
+        self.cropDim.setMaximums(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setBaseValues(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setValues(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setUnits(self.cropUnits.currentText())
+        self.scale.setBaseValues(box.upperRight[0], box.upperRight[1])
+        self.scale.setValues(box.upperRight[0], box.upperRight[1])
+        self.scale.setUnits(self.cropUnits.currentText())
 
     def setPageNumber(self, pageNumber):
         if self.pageNumber != pageNumber:

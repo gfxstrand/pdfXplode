@@ -18,6 +18,7 @@ import pdf2image
 import PIL
 import PIL.ImageQt
 from PyPDF2 import PdfFileReader
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
@@ -38,6 +39,19 @@ from PyQt5.QtWidgets import (
     QWidget
 )
 import sys
+
+class UnitsComboBox(QComboBox):
+    valueChanged = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super(UnitsComboBox, self).__init__(parent)
+
+        self.setEditable(False)
+        self.addItem('inches')
+        self.addItem('percent')
+        self.addItem('points')
+        self.setCurrentText('percent')
+        self.currentTextChanged.connect(self.valueChanged)
 
 class DimWidget(QWidget):
     def __init__(self, xName='X', yName='Y', parent=None):
@@ -62,14 +76,6 @@ class DimWidget(QWidget):
         self.link.setCheckable(True)
         self.link.setChecked(True)
 
-        self.unitsBox = QComboBox()
-        self.unitsBox.setEditable(False)
-        self.unitsBox.addItem('inches')
-        self.unitsBox.addItem('percent')
-        self.unitsBox.addItem('points')
-        self.unitsBox.setCurrentText(self.units)
-        self.unitsBox.currentTextChanged.connect(self.setUnits)
-
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.xLabel, 0, 0, 2, 1)
@@ -79,7 +85,6 @@ class DimWidget(QWidget):
         layout.addWidget(QLabel('↰'), 0, 2, 1, 1)
         layout.addWidget(self.link, 1, 2, 2, 1)
         layout.addWidget(QLabel('↲'), 3, 2, 1, 1)
-        layout.addWidget(self.unitsBox, 4, 1, 1, 2)
         self.setLayout(layout)
 
     def _updateSpinners(self):
@@ -186,11 +191,15 @@ class MainWindow(QMainWindow):
         # Scale widget
         self.cropOrig = DimWidget('X', 'Y')
         self.cropDim = DimWidget('Width', 'Height')
+        self.cropUnits = UnitsComboBox()
+        self.cropUnits.valueChanged.connect(self.cropOrig.setUnits)
+        self.cropUnits.valueChanged.connect(self.cropDim.setUnits)
         cropBox = QGroupBox()
         cropBox.setTitle('Crop')
         layout = QVBoxLayout()
         layout.addWidget(self.cropOrig)
         layout.addWidget(self.cropDim)
+        layout.addWidget(self.cropUnits)
         cropBox.setLayout(layout)
         formLayout.addWidget(cropBox)
 
@@ -198,10 +207,13 @@ class MainWindow(QMainWindow):
         self.scale = DimWidget('X', 'Y')
         # No one should need more than a mile. :-)
         self.scale.setMaximum(72 * 12 * 5280, 72 * 12 * 5280)
+        self.scaleUnits = UnitsComboBox()
+        self.scaleUnits.valueChanged.connect(self.scale.setUnits)
         scaleBox = QGroupBox()
         scaleBox.setTitle('Output Size')
         layout = QVBoxLayout()
         layout.addWidget(self.scale)
+        layout.addWidget(self.scaleUnits)
         scaleBox.setLayout(layout)
         formLayout.addWidget(scaleBox)
 

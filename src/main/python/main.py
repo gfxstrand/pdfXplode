@@ -244,9 +244,9 @@ class PDFExportOperation(QRunnable):
 
         # Compute the transform in global space
         self.globalXform = QTransform()
-        self.globalXform.translate(-cropOrig[0], -cropOrig[1])
         self.globalXform.scale(outSize[0] / cropSize[0],
                                outSize[1] / cropSize[1])
+        self.globalXform.translate(-cropOrig[0], -cropOrig[1])
 
         self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
         self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
@@ -263,8 +263,10 @@ class PDFExportOperation(QRunnable):
                 # think top-down so flip the Y transform
                 yt = self.outSize[1] - yt - self.printableHeight
 
-                pageXform = QTransform(self.globalXform).translate(-xt, -yt)
+                pageXform = QTransform()
                 pageXform.translate(self.pageMargin[0], self.pageMargin[1])
+                pageXform.translate(-xt, -yt)
+                pageXform = self.globalXform * pageXform
                 assert pageXform.isAffine()
                 ctm = (
                     pageXform.m11(),

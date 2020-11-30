@@ -140,6 +140,7 @@ class DimWidget(QWidget):
 
         self._updating = False
 
+        self.unit = "points"
         self.xBase = 1
         self.yBase = 1
 
@@ -176,7 +177,7 @@ class DimWidget(QWidget):
         if self._updating:
             return
 
-        if self.link and self.link.isChecked():
+        if self.linked():
             self._updating = True
             self.ySpin.setValue(x * (self.yBase / self.xBase))
             self._updating = False
@@ -187,7 +188,7 @@ class DimWidget(QWidget):
         if self._updating:
             return
 
-        if self.link and self.link.isChecked():
+        if self.linked():
             self._updating = True
             self.xSpin.setValue(y * (self.xBase / self.yBase))
             self._updating = False
@@ -198,20 +199,53 @@ class DimWidget(QWidget):
         return self.xSpin.value(), self.ySpin.value()
 
     def setValues(self, x, y):
+        self._updating = True
         self.xSpin.setValue(x)
         self.ySpin.setValue(y)
+        self._updating = False
 
     def setMaximums(self, xMax, yMax):
         self.xSpin.setMaximum(xMax)
         self.ySpin.setMaximum(yMax)
 
     def setBaseValues(self, xBase, yBase):
+        if xBase == self.xBase and yBase == self.yBase:
+            return
+
+        x = self.xSpin.value()
+        y = self.ySpin.value()
+
+        if self.linked() and x and y and xBase and yBase:
+            if xBase == self.xBase:
+                y = x * yBase / xBase
+            elif yBase == self.yBase:
+                x = y * xBase / yBase
+            elif abs((x / y) - (xBase / yBase)) > 0.0001:
+                yScaled = y * xBase / yBase
+                x = (x + yScaled) / 2
+                y = x * yBase / xBase
+            self.setValues(x, y)
+
+        if self.unit == 'percent':
+            self.xSpin.setScale(pointsPerUnit(self.unit, xBase))
+            self.ySpin.setScale(pointsPerUnit(self.unit, yBase))
+
         self.xBase = xBase
         self.yBase = yBase
 
     def setUnits(self, unit):
-        self.xSpin.setScale(pointsPerUnit(unit, self.xBase))
-        self.ySpin.setScale(pointsPerUnit(unit, self.yBase))
+        self.unit = unit
+        self.xSpin.setScale(pointsPerUnit(self.unit, self.xBase))
+        self.ySpin.setScale(pointsPerUnit(self.unit, self.yBase))
+
+    def linked(self):
+        return self.link and self.link.isChecked()
+
+    def setLinked(self, linked):
+        if self.link:
+            return self.link.setChecked(linked)
+        else:
+            assert not linked
 
 class PreviewWidget(QLabel):
     def __init__(self, parent=None):

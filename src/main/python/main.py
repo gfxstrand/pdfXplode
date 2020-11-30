@@ -23,17 +23,20 @@ from PyQt5.QtCore import (
     pyqtSignal,
     Qt,
     QMetaObject,
+    QRectF,
     QRunnable,
     QThreadPool,
     Q_ARG
 )
-from PyQt5.QtGui import QIcon, QPixmap, QTransform
+from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
+    QGraphicsScene,
+    QGraphicsView,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -247,28 +250,127 @@ class DimWidget(QWidget):
         else:
             assert not linked
 
-class PreviewWidget(QLabel):
+class PreviewWidget(QGraphicsView):
     def __init__(self, parent=None):
-        super(PreviewWidget, self).__init__(parent)
-        self.path = None
+        scene = QGraphicsScene()
+        super(PreviewWidget, self).__init__(scene, parent)
+
+        self.scene = scene
+        self.inputPath = None
+        self.inputSize = (0, 0)
         self.page = 1
+        self.outputSize = (0, 0)
+        self.cropSize = (0, 0)
+        self.cropOrig = (0, 0)
+        self.pageSize = (0, 0)
+        self.pageMargin = (0, 0)
+
+        self.cropRectItem = None
+        self.pageRectItems = []
+
+        self.cropPen = QPen()
+        self.cropPen.setStyle(Qt.SolidLine)
+        self.cropPen.setWidth(1)
+        self.cropPen.setBrush(Qt.red)
+        self.cropPen.setCapStyle(Qt.RoundCap)
+        self.cropPen.setJoinStyle(Qt.RoundJoin)
+
+        self.pagePen = QPen()
+        self.pagePen.setStyle(Qt.SolidLine)
+        self.pagePen.setWidth(1)
+        self.pagePen.setBrush(Qt.gray)
+        self.pagePen.setCapStyle(Qt.RoundCap)
+        self.pagePen.setJoinStyle(Qt.RoundJoin)
 
     def _reload(self):
-        images = pdf2image.convert_from_path(self.path, dpi=100,
+        self.scene.clear()
+        self.image = None
+        self.cropRectItem = None
+        self.pageRectItems = []
+        if not self.inputPath:
+            return
+
+        self.dpi = 100
+        images = pdf2image.convert_from_path(self.inputPath, dpi=self.dpi,
                                              first_page=self.page,
                                              last_page=self.page)
         self.image = PIL.ImageQt.ImageQt(images[0])
-        self.setPixmap(QPixmap.fromImage(self.image))
+        self.pixmap = self.scene.addPixmap(QPixmap.fromImage(self.image))
+        self.pixmap.setScale(72 / self.dpi)
+        self.scale(self.dpi / 72, self.dpi / 72)
 
-    def setPDFPath(self, path):
-        if self.path != path:
-            self.path = path
+    def setInputPDFPath(self, pdfPath):
+        if self.inputPath != pdfPath:
+            self.inputPath = pdfPath
             self._reload()
 
     def setPageNumber(self, page):
         if self.page != page:
             self.page = page
             self._reload()
+
+    def _updateRects(self):
+        if self.cropRectItem:
+            self.scene.removeItem(self.cropRectItem)
+        self.cropRectItem = None
+
+        for r in self.pageRectItems:
+            self.scene.removeItem(r)
+        self.pageRectItems = []
+
+        printSize = (self.pageSize[0] - 2 * self.pageMargin[0],
+                     self.pageSize[1] - 2 * self.pageMargin[1])
+        if printSize[0] == 0 or printSize[1] == 0:
+            return
+
+        cropRect = QRectF(self.cropOrig[0], self.cropOrig[1],
+                          self.cropSize[0], self.cropSize[1])
+        self.cropRectItem = self.scene.addRect(cropRect, pen=self.cropPen,
+                                               brush=QBrush(Qt.NoBrush))
+
+        numPagesX = math.ceil(self.outputSize[0] / printSize[0])
+        numPagesY = math.ceil(self.outputSize[1] / printSize[1])
+
+        if self.outputSize[0] == 0 or self.outputSize[1] == 0:
+            return
+
+        pageRectSize = (printSize[0] * self.cropSize[0] / self.outputSize[0],
+                        printSize[1] * self.cropSize[1] / self.outputSize[1])
+
+        for y in range(numPagesY):
+            for x in range(numPagesX):
+                pageRect = QRectF(self.cropOrig[0] + x * pageRectSize[0],
+                                  self.cropOrig[1] + y * pageRectSize[1],
+                                  pageRectSize[0],
+                                  pageRectSize[1])
+                rectItem = self.scene.addRect(pageRect, pen=self.pagePen,
+                                              brush=QBrush(Qt.NoBrush))
+                self.pageRectItems.append(rectItem)
+
+    def setInputSize(self, width, height):
+        self.inputSize = (width, height)
+        self._updateRects()
+        self.scene.setSceneRect(0, 0, width, height)
+
+    def setCropOrig(self, x, y):
+        self.cropOrig = (x, y)
+        self._updateRects()
+
+    def setCropSize(self, width, height):
+        self.cropSize = (width, height)
+        self._updateRects()
+
+    def setOutputSize(self, width, height):
+        self.outputSize = (width, height)
+        self._updateRects()
+
+    def setPageSize(self, width, height):
+        self.pageSize = (width, height)
+        self._updateRects()
+
+    def setPageMargin(self, width, height):
+        self.pageMargin = (width, height)
+        self._updateRects()
 
 class PDFExportOperation(QRunnable):
     def __init__(self, inPage, outFileName, cropOrig, cropSize,
@@ -392,7 +494,11 @@ class MainWindow(QMainWindow):
 
         # Scale widget
         self.cropOrig = DimWidget('X', 'Y')
+        self.cropOrig.setLinked(False)
+        self.cropOrig.valueChanged.connect(self.preview.setCropOrig)
         self.cropDim = DimWidget('Width', 'Height')
+        self.cropDim.setLinked(False)
+        self.cropDim.valueChanged.connect(self.preview.setCropSize)
         self.cropUnits = UnitsComboBox()
         self.cropUnits.valueChanged.connect(self.cropOrig.setUnits)
         self.cropUnits.valueChanged.connect(self.cropDim.setUnits)
@@ -409,6 +515,7 @@ class MainWindow(QMainWindow):
         self.scale = DimWidget('X', 'Y')
         self.scale.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.cropDim.valueChanged.connect(self.scale.setBaseValues)
+        self.scale.valueChanged.connect(self.preview.setOutputSize)
         self.scaleUnits = UnitsComboBox()
         self.scaleUnits.valueChanged.connect(self.scale.setUnits)
         scaleBox = QGroupBox()
@@ -423,9 +530,11 @@ class MainWindow(QMainWindow):
         self.outPageSize = DimWidget(compact=True)
         self.outPageSize.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageSize.setValues(8.5 * 72, 11 * 72)
+        self.outPageSize.valueChanged.connect(self.preview.setPageSize)
         self.outPageMargin = DimWidget(compact=True)
         self.outPageMargin.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageMargin.setValues(0.5 * 72, 0.5 * 72)
+        self.outPageMargin.valueChanged.connect(self.preview.setPageMargin)
         self.outPageUnits = UnitsComboBox(percent=False)
         self.outPageSize.setUnits(self.outPageUnits.currentText())
         self.outPageUnits.valueChanged.connect(self.outPageSize.setUnits)
@@ -467,6 +576,7 @@ class MainWindow(QMainWindow):
 
     def _updatePageSize(self):
         box = self.pdf.getPage(self.pageNumber - 1).mediaBox
+        self.preview.setInputSize(box.upperRight[0], box.upperRight[1])
         self.cropOrig.setMaximums(box.upperRight[0], box.upperRight[1])
         self.cropOrig.setBaseValues(box.upperRight[0], box.upperRight[1])
         self.cropOrig.setValues(0, 0)
@@ -488,7 +598,7 @@ class MainWindow(QMainWindow):
     def loadPDF(self, fileName):
         self.pdfFileName = fileName
         self.pdf = PdfFileReader(fileName)
-        self.preview.setPDFPath(fileName)
+        self.preview.setInputPDFPath(fileName)
         self.pageNumSpin.setMaximum(self.pdf.getNumPages())
         self._updatePageSize()
 

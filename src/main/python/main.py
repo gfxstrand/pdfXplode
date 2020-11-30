@@ -51,16 +51,15 @@ from PyQt5.QtWidgets import (
     QWidget
 )
 import sys
+from units import *
 
 MILE_IN_POINTS = 72 * 12 * 5280
 
-def pointsPerUnit(unit, base):
-    if unit == 'inches':
-        return 72
-    elif unit == 'percent':
+def pointsPerUnit(u, base):
+    if u == PERCENT:
         return base / 100
-    elif unit == 'points':
-        return 1
+    else:
+        return getConversionFactor(u, POINTS)
 
 class UnitsComboBox(QComboBox):
     valueChanged = pyqtSignal(str)
@@ -69,10 +68,10 @@ class UnitsComboBox(QComboBox):
         super(UnitsComboBox, self).__init__(parent)
 
         self.setEditable(False)
-        self.addItem('inches')
+        self.addItem(INCHES)
         if percent:
-            self.addItem('percent')
-        self.addItem('points')
+            self.addItem(PERCENT)
+        self.addItem(POINTS)
         self.currentTextChanged.connect(self.valueChanged)
 
 class ScaledSpinBox(QWidget):
@@ -229,7 +228,7 @@ class DimWidget(QWidget):
                 y = x * yBase / xBase
             self.setValues(x, y)
 
-        if self.unit == 'percent':
+        if self.unit == PERCENT:
             self.xSpin.setScale(pointsPerUnit(self.unit, xBase))
             self.ySpin.setScale(pointsPerUnit(self.unit, yBase))
 

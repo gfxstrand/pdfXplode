@@ -19,7 +19,14 @@ import pdf2image
 import PIL
 import PIL.ImageQt
 from PyPDF2 import PdfFileReader, PdfFileWriter
-from PyQt5.QtCore import pyqtSignal, QRunnable
+from PyQt5.QtCore import (
+    pyqtSignal,
+    Qt,
+    QMetaObject,
+    QRunnable,
+    QThreadPool,
+    Q_ARG
+)
 from PyQt5.QtGui import QIcon, QPixmap, QTransform
 from PyQt5.QtWidgets import (
     QAction,
@@ -33,6 +40,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QMainWindow,
     QMenuBar,
+    QProgressDialog,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -230,7 +238,7 @@ class PreviewWidget(QLabel):
 
 class PDFExportOperation(QRunnable):
     def __init__(self, inPage, outFileName, cropOrig, cropSize,
-                 outSize, pageSize, pageMargin):
+                 outSize, pageSize, pageMargin, progress=None):
         super(PDFExportOperation, self).__init__()
 
         self.inPage = inPage
@@ -251,11 +259,29 @@ class PDFExportOperation(QRunnable):
         self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
         self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
 
+        self.progress = progress
+        if self.progress:
+            self.progress.setMaximum(self.numPagesX * self.numPagesY + 1)
+
+    def wasCanceled(self):
+        return self.progress and self.progress.wasCanceled()
+
+    def _reportProgress(self, p):
+        if self.progress:
+            QMetaObject.invokeMethod(self.progress, "setValue",
+                                     Qt.QueuedConnection,
+                                     Q_ARG(int, p))
+
     def run(self):
         outPDF = PdfFileWriter()
 
         for y in range(self.numPagesY):
             for x in range(self.numPagesX):
+                if self.wasCanceled():
+                    return
+
+                self._reportProgress(self.numPagesX * y + x)
+
                 xt = x * self.printableWidth
                 yt = y * self.printableHeight
 
@@ -279,8 +305,12 @@ class PDFExportOperation(QRunnable):
                 page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
                 page.mergeTransformedPage(self.inPage, ctm)
 
+        self._reportProgress(self.numPagesX * self.numPagesY)
+
         with open(self.outFileName, 'wb') as f:
             outPDF.write(f)
+
+        self._reportProgress(self.numPagesX * self.numPagesY + 1)
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -428,6 +458,11 @@ class MainWindow(QMainWindow):
         self._updatePageSize()
 
     def exportPDF(self, fileName):
+        progress = QProgressDialog(self)
+        progress.setLabelText("Saving exploded PDF...")
+        progress.setCancelButtonText("Cancel")
+        progress.setWindowModality(Qt.WindowModal)
+
         export = PDFExportOperation(
             self.pdf.getPage(self.pageNumber - 1),
             fileName,
@@ -435,8 +470,12 @@ class MainWindow(QMainWindow):
             self.cropDim.values(),
             self.scale.values(),
             self.outPageSize.values(),
-            self.outPageMargin.values())
-        export.run()
+            self.outPageMargin.values(),
+            progress=progress)
+
+        progress.show()
+
+        QThreadPool.globalInstance().start(export)
 
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', filter='*.pdf')

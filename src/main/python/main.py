@@ -14,12 +14,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
+import math
 import pdf2image
 import PIL
 import PIL.ImageQt
-from PyPDF2 import PdfFileReader
+from PyPDF2 import PdfFileReader, PdfFileWriter
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon, QPixmap, QTransform
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
@@ -238,6 +239,9 @@ class MainWindow(QMainWindow):
         self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
         self.openAction.triggered.connect(self.openFileDialog)
 
+        self.exportAction = QAction(QIcon.fromTheme('document-save'), '&Export')
+        self.exportAction.triggered.connect(self.exportFileDialog)
+
         self.quitAction = QAction(QIcon.fromTheme('application-exit'), '&Quit')
         self.quitAction.triggered.connect(self.close)
 
@@ -319,6 +323,11 @@ class MainWindow(QMainWindow):
         outPageBox.setLayout(layout)
         formLayout.addWidget(outPageBox)
 
+        self.saveButton = QPushButton('Export')
+        self.saveButton.setIcon(QIcon.fromTheme('document-save'))
+        self.saveButton.clicked.connect(self.exportFileDialog)
+        formLayout.addWidget(self.saveButton)
+
         # A dummy padding widget
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
@@ -364,10 +373,63 @@ class MainWindow(QMainWindow):
         self.pageNumSpin.setMaximum(self.pdf.getNumPages())
         self._updatePageSize()
 
+    def exportPDF(self, fileName):
+        cropOrig = self.cropOrig.values()
+        cropSize = self.cropDim.values()
+        outSize = self.scale.values()
+        pageSize = self.outPageSize.values()
+        pageMargin = self.outPageMargin.values()
+        printableWidth = pageSize[0] - 2 * pageMargin[0]
+        printableHeight = pageSize[1] - 2 * pageMargin[1]
+
+        # Compute the transform in global space
+        globalXform = QTransform()
+        globalXform.translate(-cropOrig[0], -cropOrig[1])
+        globalXform.scale(outSize[0] / cropSize[0], outSize[1] / cropSize[1])
+
+        inPage = self.pdf.getPage(self.pageNumber - 1);
+        outPDF = PdfFileWriter()
+
+        numPagesX = math.ceil(outSize[0] / printableWidth)
+        numPagesY = math.ceil(outSize[1] / printableHeight)
+        numPages = numPagesX * numPagesY
+
+        for y in range(numPagesY):
+            for x in range(numPagesX):
+                xt = x * printableWidth
+                yt = y * printableHeight
+
+                # PDF coordinates start at the bottom-left but most people
+                # think top-down so flip the Y transform
+                yt = outSize[1] - yt - printableHeight
+
+                pageXform = QTransform(globalXform).translate(-xt, -yt)
+                pageXform.translate(pageMargin[0], pageMargin[1])
+                assert pageXform.isAffine()
+                ctm = (
+                    pageXform.m11(),
+                    pageXform.m12(),
+                    pageXform.m21(),
+                    pageXform.m22(),
+                    pageXform.m31(),
+                    pageXform.m32()
+                )
+                page = outPDF.addBlankPage(pageSize[0], pageSize[1])
+                page.mergeTransformedPage(inPage, ctm)
+
+        with open(fileName, 'wb') as f:
+            outPDF.write(f)
+
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', filter='*.pdf')
         if fname and fname[0]:
             self.loadPDF(fname[0])
+
+    def exportFileDialog(self):
+        fname = QFileDialog.getSaveFileName(self, 'Export PDF', filter='*.pdf')
+        if fname and fname[0]:
+            self.exportPDF(fname[0])
+
 
 if __name__ == '__main__':
     appctxt = ApplicationContext()

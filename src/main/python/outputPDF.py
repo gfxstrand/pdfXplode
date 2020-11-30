@@ -13,8 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import fpdf
+from inputPDF import InputPDFPage
+from inputImage import InputImage
+import io
 import math
-from PyPDF2 import PdfFileWriter
+import PyPDF2
 from PyQt5.QtCore import Qt, QMetaObject, QRunnable, Q_ARG
 from PyQt5.QtGui import QTransform
 
@@ -55,7 +59,24 @@ class PDFExportOperation(QRunnable):
                                      Q_ARG(int, p))
 
     def run(self):
-        outPDF = PdfFileWriter()
+        if isinstance(self.inPage, InputPDFPage):
+            inReaderPage = self.inPage.getPDFReaderPage()
+        elif isinstance(self.inPage, InputImage):
+            # If inPage is an image, turn it into a PDF first.  No,
+            # this isn't the most efficient thing in the world to do
+            # but it works and makes everything simpler.
+            inputSize = self.inPage.getSize()
+            pdf = fpdf.FPDF(unit='pt', format=inputSize)
+            pdf.add_page()
+            pdf.image(self.inPage.tmpFileName,
+                      0, 0, inputSize[0], inputSize[1])
+            data = pdf.output(dest='S').encode('latin-1')
+            reader = PyPDF2.PdfFileReader(io.BytesIO(data))
+            inReaderPage = reader.getPage(0)
+        else:
+            raise TypeError("Invalid page type")
+
+        outPDF = PyPDF2.PdfFileWriter()
 
         for y in range(self.numPagesY):
             for x in range(self.numPagesX):
@@ -85,7 +106,7 @@ class PDFExportOperation(QRunnable):
                     pageXform.m32()
                 )
                 page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
-                page.mergeTransformedPage(self.inPage.getPDFReaderPage(), ctm)
+                page.mergeTransformedPage(inReaderPage, ctm)
 
         self._reportProgress(self.numPagesX * self.numPagesY)
 

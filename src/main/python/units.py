@@ -15,6 +15,7 @@
 
 INCHES = 'inches'
 PERCENT = 'percent'
+PIXELS = 'pixels'
 POINTS = 'points'
 
 class UnitConversionError(ValueError):
@@ -30,6 +31,8 @@ def getConversionFactor(a, b):
     if a == INCHES:
         if b == POINTS:
             return 72
+        if b == PIXELS:
+            return 96
         else:
             raise UnitConversionError(a, b)
     elif b == INCHES:

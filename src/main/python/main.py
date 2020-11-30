@@ -14,7 +14,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
-from inputPDF import InputPDFFile
+import fpdf
+from inputPDF import InputPDFFile, InputPDFPage
+from inputImage import InputImage
 import math
 from PyQt5.QtCore import (
     pyqtSignal,
@@ -47,6 +49,7 @@ from PyQt5.QtWidgets import (
 import os
 from outputPDF import PDFExportOperation
 import sys
+import tempfile
 from units import *
 
 MILE_IN_POINTS = 72 * 12 * 5280
@@ -539,8 +542,18 @@ class MainWindow(QMainWindow):
             self.inputPDF.cleanup()
         self.inputPDF = InputPDFFile(fileName)
         self.inputPage = None
+        self.pageNumSpin.setDisabled(False)
         self.pageNumSpin.setMaximum(self.inputPDF.getNumPages())
         self.setPageNumber(self.pageNumSpin.value())
+
+    def loadImage(self, fileName):
+        if self.inputPDF:
+            self.inputPDF.cleanup()
+        self.inputPDF = None
+        self.inputPage = InputImage(fileName)
+        self.pageNumSpin.setDisabled(True)
+        self.preview.setInputPage(self.inputPage)
+        self._updatePageSize()
 
     def exportPDF(self, fileName):
         progress = QProgressDialog(self)
@@ -563,9 +576,19 @@ class MainWindow(QMainWindow):
         QThreadPool.globalInstance().start(export)
 
     def openFileDialog(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open PDF', filter='*.pdf')
-        if fname and fname[0]:
+        filters = 'PDF files (*.pdf);;Images (*.png *.jpg)'
+        fname = QFileDialog.getOpenFileName(self, 'Open input file',
+                                            filter=filters)
+        if not fname or not fname[0]:
+            return # Canceled
+
+        ext = os.path.splitext(fname[0])[1].lower()
+        if ext == '.pdf':
             self.loadPDF(fname[0])
+        elif ext in ('.png', '.jpg'):
+            self.loadImage(fname[0])
+        else:
+            raise RuntimeError("Unknown file extension")
 
     def exportFileDialog(self):
         fname = QFileDialog.getSaveFileName(self, 'Export PDF', filter='*.pdf')

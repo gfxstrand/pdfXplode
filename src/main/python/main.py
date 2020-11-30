@@ -199,10 +199,12 @@ class DimWidget(QWidget):
         return self.xSpin.value(), self.ySpin.value()
 
     def setValues(self, x, y):
-        self._updating = True
-        self.xSpin.setValue(x)
-        self.ySpin.setValue(y)
-        self._updating = False
+        if x != self.xSpin.value() or y != self.ySpin.value():
+            self._updating = True
+            self.xSpin.setValue(x)
+            self.ySpin.setValue(y)
+            self._updating = False
+            self.valueChanged.emit(x, y)
 
     def setMaximums(self, xMax, yMax):
         self.xSpin.setMaximum(xMax)

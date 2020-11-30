@@ -408,6 +408,7 @@ class MainWindow(QMainWindow):
         # Scale widget
         self.scale = DimWidget('X', 'Y')
         self.scale.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
+        self.cropDim.valueChanged.connect(self.scale.setBaseValues)
         self.scaleUnits = UnitsComboBox()
         self.scaleUnits.valueChanged.connect(self.scale.setUnits)
         scaleBox = QGroupBox()

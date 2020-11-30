@@ -19,7 +19,7 @@ import pdf2image
 import PIL
 import PIL.ImageQt
 from PyPDF2 import PdfFileReader, PdfFileWriter
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QRunnable
 from PyQt5.QtGui import QIcon, QPixmap, QTransform
 from PyQt5.QtWidgets import (
     QAction,
@@ -228,6 +228,58 @@ class PreviewWidget(QLabel):
             self.page = page
             self._reload()
 
+class PDFExportOperation(QRunnable):
+    def __init__(self, inPage, outFileName, cropOrig, cropSize,
+                 outSize, pageSize, pageMargin):
+        super(PDFExportOperation, self).__init__()
+
+        self.inPage = inPage
+        self.outFileName = outFileName
+        self.outSize = outSize
+        self.pageSize = pageSize
+        self.pageMargin = pageMargin
+
+        self.printableWidth = pageSize[0] - 2 * pageMargin[0]
+        self.printableHeight = pageSize[1] - 2 * pageMargin[1]
+
+        # Compute the transform in global space
+        self.globalXform = QTransform()
+        self.globalXform.translate(-cropOrig[0], -cropOrig[1])
+        self.globalXform.scale(outSize[0] / cropSize[0],
+                               outSize[1] / cropSize[1])
+
+        self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
+        self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
+
+    def run(self):
+        outPDF = PdfFileWriter()
+
+        for y in range(self.numPagesY):
+            for x in range(self.numPagesX):
+                xt = x * self.printableWidth
+                yt = y * self.printableHeight
+
+                # PDF coordinates start at the bottom-left but most people
+                # think top-down so flip the Y transform
+                yt = self.outSize[1] - yt - self.printableHeight
+
+                pageXform = QTransform(self.globalXform).translate(-xt, -yt)
+                pageXform.translate(self.pageMargin[0], self.pageMargin[1])
+                assert pageXform.isAffine()
+                ctm = (
+                    pageXform.m11(),
+                    pageXform.m12(),
+                    pageXform.m21(),
+                    pageXform.m22(),
+                    pageXform.m31(),
+                    pageXform.m32()
+                )
+                page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
+                page.mergeTransformedPage(self.inPage, ctm)
+
+        with open(self.outFileName, 'wb') as f:
+            outPDF.write(f)
+
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -374,51 +426,15 @@ class MainWindow(QMainWindow):
         self._updatePageSize()
 
     def exportPDF(self, fileName):
-        cropOrig = self.cropOrig.values()
-        cropSize = self.cropDim.values()
-        outSize = self.scale.values()
-        pageSize = self.outPageSize.values()
-        pageMargin = self.outPageMargin.values()
-        printableWidth = pageSize[0] - 2 * pageMargin[0]
-        printableHeight = pageSize[1] - 2 * pageMargin[1]
-
-        # Compute the transform in global space
-        globalXform = QTransform()
-        globalXform.translate(-cropOrig[0], -cropOrig[1])
-        globalXform.scale(outSize[0] / cropSize[0], outSize[1] / cropSize[1])
-
-        inPage = self.pdf.getPage(self.pageNumber - 1);
-        outPDF = PdfFileWriter()
-
-        numPagesX = math.ceil(outSize[0] / printableWidth)
-        numPagesY = math.ceil(outSize[1] / printableHeight)
-        numPages = numPagesX * numPagesY
-
-        for y in range(numPagesY):
-            for x in range(numPagesX):
-                xt = x * printableWidth
-                yt = y * printableHeight
-
-                # PDF coordinates start at the bottom-left but most people
-                # think top-down so flip the Y transform
-                yt = outSize[1] - yt - printableHeight
-
-                pageXform = QTransform(globalXform).translate(-xt, -yt)
-                pageXform.translate(pageMargin[0], pageMargin[1])
-                assert pageXform.isAffine()
-                ctm = (
-                    pageXform.m11(),
-                    pageXform.m12(),
-                    pageXform.m21(),
-                    pageXform.m22(),
-                    pageXform.m31(),
-                    pageXform.m32()
-                )
-                page = outPDF.addBlankPage(pageSize[0], pageSize[1])
-                page.mergeTransformedPage(inPage, ctm)
-
-        with open(fileName, 'wb') as f:
-            outPDF.write(f)
+        export = PDFExportOperation(
+            self.pdf.getPage(self.pageNumber - 1),
+            fileName,
+            self.cropOrig.values(),
+            self.cropDim.values(),
+            self.scale.values(),
+            self.outPageSize.values(),
+            self.outPageMargin.values())
+        export.run()
 
     def openFileDialog(self):
         fname = QFileDialog.getOpenFileName(self, 'Open PDF', filter='*.pdf')

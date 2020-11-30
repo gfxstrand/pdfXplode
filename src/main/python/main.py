@@ -53,24 +53,19 @@ from units import *
 
 MILE_IN_POINTS = 72 * 12 * 5280
 
-def pointsPerUnit(u, base):
-    if u == PERCENT:
-        return base / 100
-    else:
-        return getConversionFactor(u, POINTS)
-
 class UnitsComboBox(QComboBox):
     valueChanged = pyqtSignal(str)
 
-    def __init__(self, parent=None, percent=True):
+    def __init__(self, parent=None):
         super(UnitsComboBox, self).__init__(parent)
-
         self.setEditable(False)
-        self.addItem(INCHES)
-        if percent:
-            self.addItem(PERCENT)
-        self.addItem(POINTS)
         self.currentTextChanged.connect(self.valueChanged)
+
+    def setAvailableUnits(self, availableUnits):
+        old = self.currentText()
+        self.clear()
+        self.addItems(availableUnits)
+        self.setCurrentText(old)
 
 class ScaledSpinBox(QWidget):
     valueChanged = pyqtSignal(float)
@@ -140,7 +135,8 @@ class DimWidget(QWidget):
 
         self._updating = False
 
-        self.unit = "points"
+        self.displayUnit = POINTS
+        self.baseUnit = POINTS
         self.xBase = 1
         self.yBase = 1
 
@@ -210,6 +206,15 @@ class DimWidget(QWidget):
         self.xSpin.setMaximum(xMax)
         self.ySpin.setMaximum(yMax)
 
+    def _resetScale(self):
+        if self.displayUnit == PERCENT:
+            self.xSpin.setScale(self.xBase / 100)
+            self.ySpin.setScale(self.yBase / 100)
+        else:
+            scale = getConversionFactor(self.displayUnit, self.baseUnit)
+            self.xSpin.setScale(scale)
+            self.ySpin.setScale(scale)
+
     def setBaseValues(self, xBase, yBase):
         if xBase == self.xBase and yBase == self.yBase:
             return
@@ -228,17 +233,19 @@ class DimWidget(QWidget):
                 y = x * yBase / xBase
             self.setValues(x, y)
 
-        if self.unit == PERCENT:
-            self.xSpin.setScale(pointsPerUnit(self.unit, xBase))
-            self.ySpin.setScale(pointsPerUnit(self.unit, yBase))
+        if self.displayUnit == PERCENT:
+            self._resetScale()
 
         self.xBase = xBase
         self.yBase = yBase
 
-    def setUnits(self, unit):
-        self.unit = unit
-        self.xSpin.setScale(pointsPerUnit(self.unit, self.xBase))
-        self.ySpin.setScale(pointsPerUnit(self.unit, self.yBase))
+    def setBaseUnit(self, unit):
+        self.baseUnit = unit
+        self._resetScale()
+
+    def setDisplayUnit(self, unit):
+        self.displayUnit = unit
+        self._resetScale()
 
     def linked(self):
         return self.link and self.link.isChecked()
@@ -301,6 +308,7 @@ class PreviewWidget(QGraphicsView):
         if self.inputPage != page:
             self.inputPage = page
             self._reload()
+            self._updateRects()
 
     def _updateRects(self):
         if self.cropRectItem:
@@ -488,8 +496,8 @@ class MainWindow(QMainWindow):
         self.cropDim.setLinked(False)
         self.cropDim.valueChanged.connect(self.preview.setCropSize)
         self.cropUnits = UnitsComboBox()
-        self.cropUnits.valueChanged.connect(self.cropOrig.setUnits)
-        self.cropUnits.valueChanged.connect(self.cropDim.setUnits)
+        self.cropUnits.valueChanged.connect(self.cropOrig.setDisplayUnit)
+        self.cropUnits.valueChanged.connect(self.cropDim.setDisplayUnit)
         cropBox = QGroupBox()
         cropBox.setTitle('Input Crop')
         layout = QVBoxLayout()
@@ -503,9 +511,10 @@ class MainWindow(QMainWindow):
         self.scale = DimWidget('X', 'Y')
         self.scale.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.cropDim.valueChanged.connect(self.scale.setBaseValues)
+        self.preview.setOutputSize(*self.scale.values())
         self.scale.valueChanged.connect(self.preview.setOutputSize)
         self.scaleUnits = UnitsComboBox()
-        self.scaleUnits.valueChanged.connect(self.scale.setUnits)
+        self.scaleUnits.valueChanged.connect(self.scale.setDisplayUnit)
         scaleBox = QGroupBox()
         scaleBox.setTitle('Output Size')
         layout = QVBoxLayout()
@@ -516,18 +525,23 @@ class MainWindow(QMainWindow):
 
         # Output page size and margin
         self.outPageSize = DimWidget(compact=True)
+        self.outPageSize.setBaseUnit(POINTS)
         self.outPageSize.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageSize.setValues(8.5 * 72, 11 * 72)
+        self.preview.setPageSize(*self.outPageSize.values())
         self.outPageSize.valueChanged.connect(self.preview.setPageSize)
         self.outPageMargin = DimWidget(compact=True)
+        self.outPageMargin.setBaseUnit(POINTS)
         self.outPageMargin.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageMargin.setValues(0.5 * 72, 0.5 * 72)
+        self.preview.setPageMargin(*self.outPageMargin.values())
         self.outPageMargin.valueChanged.connect(self.preview.setPageMargin)
-        self.outPageUnits = UnitsComboBox(percent=False)
-        self.outPageSize.setUnits(self.outPageUnits.currentText())
-        self.outPageUnits.valueChanged.connect(self.outPageSize.setUnits)
-        self.outPageMargin.setUnits(self.outPageUnits.currentText())
-        self.outPageUnits.valueChanged.connect(self.outPageMargin.setUnits)
+        self.outPageUnits = UnitsComboBox()
+        self.outPageUnits.setAvailableUnits([POINTS, INCHES])
+        self.outPageSize.setDisplayUnit(self.outPageUnits.currentText())
+        self.outPageUnits.valueChanged.connect(self.outPageSize.setDisplayUnit)
+        self.outPageMargin.setDisplayUnit(self.outPageUnits.currentText())
+        self.outPageUnits.valueChanged.connect(self.outPageMargin.setDisplayUnit)
         outPageBox = QGroupBox()
         outPageBox.setTitle('Output Page')
         layout = QVBoxLayout()
@@ -567,17 +581,24 @@ class MainWindow(QMainWindow):
             return
 
         size = self.inputPage.getSize()
+        self.cropUnits.setAvailableUnits(self.inputPage.getAllowedUnits())
         self.cropOrig.setMaximums(*size)
         self.cropOrig.setBaseValues(*size)
         self.cropOrig.setValues(0, 0)
-        self.cropOrig.setUnits(self.cropUnits.currentText())
+        self.cropOrig.setBaseUnit(self.inputPage.getNativeUnit())
+        self.cropOrig.setDisplayUnit(self.cropUnits.currentText())
         self.cropDim.setMaximums(*size)
         self.cropDim.setBaseValues(*size)
         self.cropDim.setValues(*size)
-        self.cropDim.setUnits(self.cropUnits.currentText())
+        self.cropDim.setBaseUnit(self.inputPage.getNativeUnit())
+        self.cropDim.setDisplayUnit(self.cropUnits.currentText())
+        if self.inputPage.getNativeUnit() == POINTS:
+            self.scaleUnits.setAvailableUnits([PERCENT, POINTS, INCHES])
+        else:
+            self.scaleUnits.setAvailableUnits([POINTS, INCHES])
         self.scale.setBaseValues(*size)
         self.scale.setValues(*size)
-        self.scale.setUnits(self.cropUnits.currentText())
+        self.scale.setDisplayUnit(self.scaleUnits.currentText())
 
     def setPageNumber(self, pageNumber):
         if self.inputPDF is None:

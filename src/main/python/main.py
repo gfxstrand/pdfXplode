@@ -14,11 +14,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
+from inputPDF import InputPDFFile
 import math
-import pdf2image
-import PIL
-import PIL.ImageQt
-from PyPDF2 import PdfFileReader, PdfFileWriter
+from PyPDF2 import PdfFileWriter
 from PyQt5.QtCore import (
     pyqtSignal,
     Qt,
@@ -255,9 +253,7 @@ class PreviewWidget(QGraphicsView):
         super(PreviewWidget, self).__init__(scene, parent)
 
         self.scene = scene
-        self.inputPath = None
-        self.inputSize = (0, 0)
-        self.page = 1
+        self.inputPage = None
         self.outputSize = (0, 0)
         self.cropSize = (0, 0)
         self.cropOrig = (0, 0)
@@ -286,26 +282,22 @@ class PreviewWidget(QGraphicsView):
         self.image = None
         self.cropRectItem = None
         self.pageRectItems = []
-        if not self.inputPath:
+        if not self.inputPage:
             return
 
-        self.dpi = 100
-        images = pdf2image.convert_from_path(self.inputPath, dpi=self.dpi,
-                                             first_page=self.page,
-                                             last_page=self.page)
-        self.image = PIL.ImageQt.ImageQt(images[0])
+        self.image = self.inputPage.getQImage(96 / 72)
         self.pixmap = self.scene.addPixmap(QPixmap.fromImage(self.image))
-        self.pixmap.setScale(72 / self.dpi)
-        self.scale(self.dpi / 72, self.dpi / 72)
+        pageSize = self.inputPage.getSize()
+        # Assume it scales the same in both directions
+        assert (pageSize[0] * self.image.height() ==
+                pageSize[1] * self.image.width())
+        self.pixmap.setScale(pageSize[0] / self.image.width())
+        self.setSceneRect(0, 0, pageSize[0], pageSize[1])
+        self.scale(96 / 72, 96 / 72)
 
-    def setInputPDFPath(self, pdfPath):
-        if self.inputPath != pdfPath:
-            self.inputPath = pdfPath
-            self._reload()
-
-    def setPageNumber(self, page):
-        if self.page != page:
-            self.page = page
+    def setInputPage(self, page):
+        if self.inputPage != page:
+            self.inputPage = page
             self._reload()
 
     def _updateRects(self):
@@ -345,11 +337,6 @@ class PreviewWidget(QGraphicsView):
                 rectItem = self.scene.addRect(pageRect, pen=self.pagePen,
                                               brush=QBrush(Qt.NoBrush))
                 self.pageRectItems.append(rectItem)
-
-    def setInputSize(self, width, height):
-        self.inputSize = (width, height)
-        self._updateRects()
-        self.scene.setSceneRect(0, 0, width, height)
 
     def setCropOrig(self, x, y):
         self.cropOrig = (x, y)
@@ -438,7 +425,7 @@ class PDFExportOperation(QRunnable):
                     pageXform.m32()
                 )
                 page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
-                page.mergeTransformedPage(self.inPage, ctm)
+                page.mergeTransformedPage(self.inPage.getPDFReaderPage(), ctm)
 
         self._reportProgress(self.numPagesX * self.numPagesY)
 
@@ -451,9 +438,9 @@ class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
-        self.pdf = None
-        self.pdfFileName = None
-        self.pageNumber = 1
+        self.inputPDF = None
+        self.inputPage = None
+        self.inputPageNumber = 0
 
         self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
         self.openAction.triggered.connect(self.openFileDialog)
@@ -482,7 +469,7 @@ class MainWindow(QMainWindow):
         self.pageNumSpin = QSpinBox()
         self.pageNumSpin.setMinimum(1)
         self.pageNumSpin.setMaximum(1)
-        self.pageNumSpin.setValue(self.pageNumber)
+        self.pageNumSpin.setValue(self.inputPageNumber)
         self.pageNumSpin.valueChanged.connect(self.setPageNumber)
         pageNumBox = QGroupBox()
         pageNumBox.setTitle('Page Number')
@@ -574,32 +561,41 @@ class MainWindow(QMainWindow):
         fileMenu.addAction(self.quitAction)
 
     def _updatePageSize(self):
-        box = self.pdf.getPage(self.pageNumber - 1).mediaBox
-        self.preview.setInputSize(box.upperRight[0], box.upperRight[1])
-        self.cropOrig.setMaximums(box.upperRight[0], box.upperRight[1])
-        self.cropOrig.setBaseValues(box.upperRight[0], box.upperRight[1])
+        if self.inputPage is None:
+            return
+
+        size = self.inputPage.getSize()
+        self.cropOrig.setMaximums(*size)
+        self.cropOrig.setBaseValues(*size)
         self.cropOrig.setValues(0, 0)
         self.cropOrig.setUnits(self.cropUnits.currentText())
-        self.cropDim.setMaximums(box.upperRight[0], box.upperRight[1])
-        self.cropDim.setBaseValues(box.upperRight[0], box.upperRight[1])
-        self.cropDim.setValues(box.upperRight[0], box.upperRight[1])
+        self.cropDim.setMaximums(*size)
+        self.cropDim.setBaseValues(*size)
+        self.cropDim.setValues(*size)
         self.cropDim.setUnits(self.cropUnits.currentText())
-        self.scale.setBaseValues(box.upperRight[0], box.upperRight[1])
-        self.scale.setValues(box.upperRight[0], box.upperRight[1])
+        self.scale.setBaseValues(*size)
+        self.scale.setValues(*size)
         self.scale.setUnits(self.cropUnits.currentText())
 
     def setPageNumber(self, pageNumber):
-        if self.pageNumber != pageNumber:
-            self.pageNumber = pageNumber
-            self.preview.setPageNumber(pageNumber)
+        if self.inputPDF is None:
+            return # Only PDFs have page numbers
+
+        if self.inputPageNumber != pageNumber or self.inputPage is None:
+            if self.inputPage is not None:
+                self.inputPage.cleanup()
+            self.inputPageNumber = pageNumber
+            self.inputPage = self.inputPDF.getPage(pageNumber)
+            self.preview.setInputPage(self.inputPage)
             self._updatePageSize()
 
     def loadPDF(self, fileName):
-        self.pdfFileName = fileName
-        self.pdf = PdfFileReader(fileName)
-        self.preview.setInputPDFPath(fileName)
-        self.pageNumSpin.setMaximum(self.pdf.getNumPages())
-        self._updatePageSize()
+        if self.inputPDF:
+            self.inputPDF.cleanup()
+        self.inputPDF = InputPDFFile(fileName)
+        self.inputPage = None
+        self.pageNumSpin.setMaximum(self.inputPDF.getNumPages())
+        self.setPageNumber(self.pageNumSpin.value())
 
     def exportPDF(self, fileName):
         progress = QProgressDialog(self)
@@ -608,7 +604,7 @@ class MainWindow(QMainWindow):
         progress.setWindowModality(Qt.WindowModal)
 
         export = PDFExportOperation(
-            self.pdf.getPage(self.pageNumber - 1),
+            self.inputPage,
             fileName,
             self.cropOrig.values(),
             self.cropDim.values(),

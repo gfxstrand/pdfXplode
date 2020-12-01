@@ -61,12 +61,22 @@ class UnitsComboBox(QComboBox):
     def __init__(self, parent=None):
         super(UnitsComboBox, self).__init__(parent)
         self.setEditable(False)
-        self.currentTextChanged.connect(self.valueChanged)
+        self.currentTextChanged.connect(self._parentTextChanged)
+        self._updating = False
+
+    def _parentTextChanged(self, text):
+        if not self._updating:
+            self.valueChanged.emit(text)
+
+    def value(self):
+        return self.currentText()
 
     def setAvailableUnits(self, availableUnits):
+        self._updating = True
         old = self.currentText()
         self.clear()
         self.addItems(availableUnits)
+        self._updating = False
         self.setCurrentText(old)
 
 class ScaledSpinBox(QWidget):
@@ -468,9 +478,9 @@ class MainWindow(QMainWindow):
         self.outPageMargin.valueChanged.connect(self.preview.setPageMargin)
         self.outPageUnits = UnitsComboBox()
         self.outPageUnits.setAvailableUnits([POINTS, INCHES])
-        self.outPageSize.setDisplayUnit(self.outPageUnits.currentText())
+        self.outPageSize.setDisplayUnit(self.outPageUnits.value())
         self.outPageUnits.valueChanged.connect(self.outPageSize.setDisplayUnit)
-        self.outPageMargin.setDisplayUnit(self.outPageUnits.currentText())
+        self.outPageMargin.setDisplayUnit(self.outPageUnits.value())
         self.outPageUnits.valueChanged.connect(self.outPageMargin.setDisplayUnit)
         outPageBox = QGroupBox()
         outPageBox.setTitle('Output Page')
@@ -524,19 +534,19 @@ class MainWindow(QMainWindow):
         self.cropOrig.setBaseValues(*size)
         self.cropOrig.setValues(0, 0)
         self.cropOrig.setBaseUnit(self.inputPage.getNativeUnit())
-        self.cropOrig.setDisplayUnit(self.cropUnits.currentText())
+        self.cropOrig.setDisplayUnit(self.cropUnits.value())
         self.cropDim.setMaximums(*size)
         self.cropDim.setBaseValues(*size)
         self.cropDim.setValues(*size)
         self.cropDim.setBaseUnit(self.inputPage.getNativeUnit())
-        self.cropDim.setDisplayUnit(self.cropUnits.currentText())
+        self.cropDim.setDisplayUnit(self.cropUnits.value())
         if self.inputPage.getNativeUnit() == POINTS:
             self.scaleUnits.setAvailableUnits([PERCENT, POINTS, INCHES])
         else:
             self.scaleUnits.setAvailableUnits([POINTS, INCHES])
         self.scale.setBaseValues(*size)
         self.scale.setValues(*size)
-        self.scale.setDisplayUnit(self.scaleUnits.currentText())
+        self.scale.setDisplayUnit(self.scaleUnits.value())
 
     def setPageNumber(self, pageNumber):
         if self.inputPDF is None:

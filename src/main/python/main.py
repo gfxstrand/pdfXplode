@@ -16,15 +16,11 @@
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from inputPDF import InputPDFFile
 import math
-from PyPDF2 import PdfFileWriter
 from PyQt5.QtCore import (
     pyqtSignal,
     Qt,
-    QMetaObject,
     QRectF,
-    QRunnable,
     QThreadPool,
-    Q_ARG
 )
 from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
 from PyQt5.QtWidgets import (
@@ -48,6 +44,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget
 )
+import os
+from outputPDF import PDFExportOperation
 import sys
 from units import *
 
@@ -367,82 +365,6 @@ class PreviewWidget(QGraphicsView):
     def setPageMargin(self, width, height):
         self.pageMargin = (width, height)
         self._updateRects()
-
-class PDFExportOperation(QRunnable):
-    def __init__(self, inPage, outFileName, cropOrig, cropSize,
-                 outSize, pageSize, pageMargin, progress=None):
-        super(PDFExportOperation, self).__init__()
-
-        self.inPage = inPage
-        self.outFileName = outFileName
-        self.outSize = outSize
-        self.pageSize = pageSize
-        self.pageMargin = pageMargin
-
-        self.printableWidth = pageSize[0] - 2 * pageMargin[0]
-        self.printableHeight = pageSize[1] - 2 * pageMargin[1]
-
-        # Compute the transform in global space
-        self.globalXform = QTransform()
-        self.globalXform.scale(outSize[0] / cropSize[0],
-                               outSize[1] / cropSize[1])
-        self.globalXform.translate(-cropOrig[0], -cropOrig[1])
-
-        self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
-        self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
-
-        self.progress = progress
-        if self.progress:
-            self.progress.setMaximum(self.numPagesX * self.numPagesY + 1)
-
-    def wasCanceled(self):
-        return self.progress and self.progress.wasCanceled()
-
-    def _reportProgress(self, p):
-        if self.progress:
-            QMetaObject.invokeMethod(self.progress, "setValue",
-                                     Qt.QueuedConnection,
-                                     Q_ARG(int, p))
-
-    def run(self):
-        outPDF = PdfFileWriter()
-
-        for y in range(self.numPagesY):
-            for x in range(self.numPagesX):
-                if self.wasCanceled():
-                    return
-
-                self._reportProgress(self.numPagesX * y + x)
-
-                xt = x * self.printableWidth
-                yt = y * self.printableHeight
-
-                # PDF coordinates start at the bottom-left but most people
-                # think top-down so flip the Y transform
-                yt = self.outSize[1] - yt - self.printableHeight
-
-                pageXform = QTransform()
-                pageXform.translate(self.pageMargin[0], self.pageMargin[1])
-                pageXform.translate(-xt, -yt)
-                pageXform = self.globalXform * pageXform
-                assert pageXform.isAffine()
-                ctm = (
-                    pageXform.m11(),
-                    pageXform.m12(),
-                    pageXform.m21(),
-                    pageXform.m22(),
-                    pageXform.m31(),
-                    pageXform.m32()
-                )
-                page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
-                page.mergeTransformedPage(self.inPage.getPDFReaderPage(), ctm)
-
-        self._reportProgress(self.numPagesX * self.numPagesY)
-
-        with open(self.outFileName, 'wb') as f:
-            outPDF.write(f)
-
-        self._reportProgress(self.numPagesX * self.numPagesY + 1)
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):

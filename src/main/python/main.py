@@ -317,7 +317,7 @@ class PreviewWidget(QGraphicsView):
                 pageSize[1] * self.image.width())
         self.pixmap.setScale(pageSize[0] / self.image.width())
         self.setSceneRect(0, 0, pageSize[0], pageSize[1])
-        self.scale(96 / 72, 96 / 72)
+        self.setTransform(QTransform().scale(96 / 72, 96 / 72))
 
     def setInputPage(self, page):
         if self.inputPage != page:

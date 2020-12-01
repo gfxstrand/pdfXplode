@@ -63,7 +63,7 @@ class PDFExportOperation(QRunnable):
 
     def run(self):
         if isinstance(self.inPage, InputPDFPage):
-            inReaderPage = self.inPage.getPDFReaderPage()
+            inReaderPage = self.inPage.getPyPDF2PageObject()
         elif isinstance(self.inPage, InputImage):
             # If inPage is an image, turn it into a PDF first.  No,
             # this isn't the most efficient thing in the world to do

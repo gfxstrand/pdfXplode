@@ -615,6 +615,5 @@ if __name__ == '__main__':
     menuBar.addAction(openAct)
 
     window = MainWindow()
-    window.loadPDF('/home/jason/resume.pdf')
     window.show()
     sys.exit(appctxt.app.exec_())

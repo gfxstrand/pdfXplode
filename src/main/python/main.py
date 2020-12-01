@@ -28,6 +28,7 @@ from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -478,6 +479,10 @@ class MainWindow(QMainWindow):
         outPageBox.setLayout(layout)
         formLayout.addWidget(outPageBox)
 
+        self.registrationMarks = QCheckBox('Registration Marks')
+        self.registrationMarks.setChecked(True)
+        formLayout.addWidget(self.registrationMarks)
+
         self.saveButton = QPushButton('Export')
         self.saveButton.setIcon(QIcon.fromTheme('document-save'))
         self.saveButton.clicked.connect(self.exportFileDialog)
@@ -569,6 +574,7 @@ class MainWindow(QMainWindow):
             self.scale.values(),
             self.outPageSize.values(),
             self.outPageMargin.values(),
+            registrationMarks=self.registrationMarks.isChecked(),
             progress=progress)
 
         progress.show()

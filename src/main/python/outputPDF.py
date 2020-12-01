@@ -24,7 +24,8 @@ from PyQt5.QtGui import QTransform
 
 class PDFExportOperation(QRunnable):
     def __init__(self, inPage, outFileName, cropOrig, cropSize,
-                 outSize, pageSize, pageMargin, progress=None):
+                 outSize, pageSize, pageMargin,
+                 registrationMarks=False, progress=None):
         super(PDFExportOperation, self).__init__()
 
         self.inPage = inPage
@@ -32,6 +33,7 @@ class PDFExportOperation(QRunnable):
         self.outSize = outSize
         self.pageSize = pageSize
         self.pageMargin = pageMargin
+        self.registrationMarks = registrationMarks
 
         self.printableWidth = pageSize[0] - 2 * pageMargin[0]
         self.printableHeight = pageSize[1] - 2 * pageMargin[1]
@@ -76,6 +78,30 @@ class PDFExportOperation(QRunnable):
         else:
             raise TypeError("Invalid page type")
 
+        overlayPage = None
+        if self.registrationMarks:
+            pdf = fpdf.FPDF(unit='pt', format=self.pageSize)
+            pdf.add_page()
+            pw = self.pageSize[0]
+            ph = self.pageSize[1]
+            mw = self.pageMargin[0]
+            mh = self.pageMargin[1]
+            # A caution factor of 90% to keep our registration lines from
+            # running into the main page area
+            cf = 0.9
+            pdf.line(0, mh, mw * cf, mh)
+            pdf.line(mw, 0, mw, mh * cf)
+            pdf.line(pw, mh, pw - mw * cf, mh)
+            pdf.line(pw - mw, 0, pw - mw, mh * cf)
+            pdf.line(0, ph - mh, mw * cf, ph - mh)
+            pdf.line(mw, ph, mw, ph - mh * cf)
+            pdf.line(pw, ph - mh, pw - mw * cf, ph - mh)
+            pdf.line(pw - mw, ph, pw - mw, ph - mh * cf)
+
+            data = pdf.output(dest='S').encode('latin-1')
+            reader = PyPDF2.PdfFileReader(io.BytesIO(data))
+            overlayPage = reader.getPage(0)
+
         outPDF = PyPDF2.PdfFileWriter()
 
         for y in range(self.numPagesY):
@@ -107,6 +133,9 @@ class PDFExportOperation(QRunnable):
                 )
                 page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
                 page.mergeTransformedPage(inReaderPage, ctm)
+
+                if overlayPage:
+                    page.mergePage(overlayPage)
 
         self._reportProgress(self.numPagesX * self.numPagesY)
 

@@ -384,7 +384,8 @@ class MainWindow(QMainWindow):
         self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
         self.openAction.triggered.connect(self.openFileDialog)
 
-        self.exportAction = QAction(QIcon.fromTheme('document-save'), '&Export')
+        self.exportAction = QAction(QIcon.fromTheme('document-save'),
+                                    '&Save PDF')
         self.exportAction.triggered.connect(self.exportFileDialog)
 
         self.quitAction = QAction(QIcon.fromTheme('application-exit'), '&Quit')
@@ -490,7 +491,7 @@ class MainWindow(QMainWindow):
         self.overDraw.setChecked(False)
         formLayout.addWidget(self.overDraw)
 
-        self.saveButton = QPushButton('Export')
+        self.saveButton = QPushButton('Save PDF')
         self.saveButton.setIcon(QIcon.fromTheme('document-save'))
         self.saveButton.clicked.connect(self.exportFileDialog)
         formLayout.addWidget(self.saveButton)

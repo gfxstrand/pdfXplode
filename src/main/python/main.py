@@ -274,6 +274,9 @@ class PreviewWidget(QGraphicsView):
         self.cropRectItem = None
         self.pageRectItems = []
 
+        backgroundBrush = QBrush(Qt.gray)
+        self.scene.setBackgroundBrush(backgroundBrush)
+
         self.cropPen = QPen()
         self.cropPen.setStyle(Qt.SolidLine)
         self.cropPen.setWidth(1)

@@ -483,6 +483,10 @@ class MainWindow(QMainWindow):
         self.registrationMarks.setChecked(True)
         formLayout.addWidget(self.registrationMarks)
 
+        self.overDraw = QCheckBox('Over-draw into margin')
+        self.overDraw.setChecked(False)
+        formLayout.addWidget(self.overDraw)
+
         self.saveButton = QPushButton('Export')
         self.saveButton.setIcon(QIcon.fromTheme('document-save'))
         self.saveButton.clicked.connect(self.exportFileDialog)
@@ -574,6 +578,7 @@ class MainWindow(QMainWindow):
             self.scale.values(),
             self.outPageSize.values(),
             self.outPageMargin.values(),
+            trim=not self.overDraw.isChecked(),
             registrationMarks=self.registrationMarks.isChecked(),
             progress=progress)
 

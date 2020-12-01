@@ -24,7 +24,7 @@ from PyQt5.QtGui import QTransform
 
 class PDFExportOperation(QRunnable):
     def __init__(self, inPage, outFileName, cropOrig, cropSize,
-                 outSize, pageSize, pageMargin,
+                 outSize, pageSize, pageMargin, trim=False,
                  registrationMarks=False, progress=None):
         super(PDFExportOperation, self).__init__()
 
@@ -33,6 +33,7 @@ class PDFExportOperation(QRunnable):
         self.outSize = outSize
         self.pageSize = pageSize
         self.pageMargin = pageMargin
+        self.trim = trim
         self.registrationMarks = registrationMarks
 
         self.printableWidth = pageSize[0] - 2 * pageMargin[0]
@@ -79,24 +80,34 @@ class PDFExportOperation(QRunnable):
             raise TypeError("Invalid page type")
 
         overlayPage = None
-        if self.registrationMarks:
+        if self.trim or self.registrationMarks:
             pdf = fpdf.FPDF(unit='pt', format=self.pageSize)
             pdf.add_page()
             pw = self.pageSize[0]
             ph = self.pageSize[1]
             mw = self.pageMargin[0]
             mh = self.pageMargin[1]
-            # A caution factor of 90% to keep our registration lines from
-            # running into the main page area
-            cf = 0.9
-            pdf.line(0, mh, mw * cf, mh)
-            pdf.line(mw, 0, mw, mh * cf)
-            pdf.line(pw, mh, pw - mw * cf, mh)
-            pdf.line(pw - mw, 0, pw - mw, mh * cf)
-            pdf.line(0, ph - mh, mw * cf, ph - mh)
-            pdf.line(mw, ph, mw, ph - mh * cf)
-            pdf.line(pw, ph - mh, pw - mw * cf, ph - mh)
-            pdf.line(pw - mw, ph, pw - mw, ph - mh * cf)
+
+            # We "trim" the page by rendering white in the margins
+            if self.trim:
+                pdf.set_fill_color(255)
+                pdf.rect(0, 0, mw, ph, 'F')
+                pdf.rect(0, 0, pw, mh, 'F')
+                pdf.rect(pw - mw, 0, mw, ph, 'F')
+                pdf.rect(0, ph - mh, pw, mh, 'F')
+
+            if self.registrationMarks:
+                # A caution factor of 90% to keep our registration lines from
+                # running into the main page area
+                cf = 0.9
+                pdf.line(0, mh, mw * cf, mh)
+                pdf.line(mw, 0, mw, mh * cf)
+                pdf.line(pw, mh, pw - mw * cf, mh)
+                pdf.line(pw - mw, 0, pw - mw, mh * cf)
+                pdf.line(0, ph - mh, mw * cf, ph - mh)
+                pdf.line(mw, ph, mw, ph - mh * cf)
+                pdf.line(pw, ph - mh, pw - mw * cf, ph - mh)
+                pdf.line(pw - mw, ph, pw - mw, ph - mh * cf)
 
             data = pdf.output(dest='S').encode('latin-1')
             reader = PyPDF2.PdfFileReader(io.BytesIO(data))

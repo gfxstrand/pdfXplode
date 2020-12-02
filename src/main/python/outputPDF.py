@@ -30,6 +30,8 @@ class OutputOperation(QRunnable):
         super(OutputOperation, self).__init__()
 
         self.inPage = inPage
+        self.cropOrig = cropOrig
+        self.cropSize = cropSize
         self.outSize = outSize
         self.pageSize = pageSize
         self.pageMargin = pageMargin
@@ -38,12 +40,6 @@ class OutputOperation(QRunnable):
 
         self.printableWidth = pageSize[0] - 2 * pageMargin[0]
         self.printableHeight = pageSize[1] - 2 * pageMargin[1]
-
-        # Compute the transform in global space
-        self.globalXform = QTransform()
-        self.globalXform.scale(outSize[0] / cropSize[0],
-                               outSize[1] / cropSize[1])
-        self.globalXform.translate(-cropOrig[0], -cropOrig[1])
 
         self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
         self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
@@ -70,11 +66,11 @@ class OutputOperation(QRunnable):
                                 self.printableWidth,
                                 self.printableHeight)
 
-        pageXform = QTransform()
-        pageXform.translate(self.pageMargin[0], self.pageMargin[1])
-        pageXform.translate(-xt, -yt)
-        pageXform = self.globalXform * pageXform
-        painter.setTransform(pageXform)
+        painter.translate(self.pageMargin[0], self.pageMargin[1])
+        painter.translate(-xt, -yt)
+        painter.scale(self.outSize[0] / self.cropSize[0],
+                      self.outSize[1] / self.cropSize[1])
+        painter.translate(-self.cropOrig[0], -self.cropOrig[1])
         painter.drawImage(0, 0, self.inPage.getQImage())
 
         painter.restore()
@@ -221,22 +217,24 @@ class PDFExportOperation(OutputOperation):
                 xt = x * self.printableWidth
                 yt = y * self.printableHeight
 
-                # PDF coordinates start at the bottom-left but most people
-                # think top-down so flip the Y transform
+                # PDF coordinates start at the bottom-left but everything
+                # else is top-down so flip the Y transform
                 yt = self.outSize[1] - yt - self.printableHeight
 
-                pageXform = QTransform()
-                pageXform.translate(self.pageMargin[0], self.pageMargin[1])
-                pageXform.translate(-xt, -yt)
-                pageXform = self.globalXform * pageXform
-                assert pageXform.isAffine()
+                xform = QTransform()
+                xform.translate(self.pageMargin[0], self.pageMargin[1])
+                xform.translate(-xt, -yt)
+                xform.scale(self.outSize[0] / self.cropSize[0],
+                            self.outSize[1] / self.cropSize[1])
+                xform.translate(-self.cropOrig[0], -self.cropOrig[1])
+                assert xform.isAffine()
                 ctm = (
-                    pageXform.m11(),
-                    pageXform.m12(),
-                    pageXform.m21(),
-                    pageXform.m22(),
-                    pageXform.m31(),
-                    pageXform.m32()
+                    xform.m11(),
+                    xform.m12(),
+                    xform.m21(),
+                    xform.m22(),
+                    xform.m31(),
+                    xform.m32()
                 )
                 page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
                 page.mergeTransformedPage(inReaderPage, ctm)

@@ -143,7 +143,7 @@ class ScaledSpinBox(QWidget):
 class DimWidget(QWidget):
     valueChanged = pyqtSignal(float, float)
 
-    def __init__(self, xName='X', yName='Y', compact=False, parent=None):
+    def __init__(self, ctx, xName='X', yName='Y', compact=False, parent=None):
         super(DimWidget, self).__init__(parent)
 
         self._updating = False
@@ -167,9 +167,14 @@ class DimWidget(QWidget):
             layout.addWidget(self.ySpin)
             self.setLayout(layout)
         else:
-            self.link = QPushButton('Link')
+            self.linkIcon = QIcon(ctx.get_resource('icons/spin-link.svg'))
+            self.unlinkIcon = QIcon(ctx.get_resource('icons/spin-unlink.svg'))
+            self.link = QPushButton()
+            self.link.setIcon(self.linkIcon)
             self.link.setCheckable(True)
             self.link.setChecked(True)
+            self.link.setFixedSize(32, 40)
+            self.link.toggled.connect(self._linkToggled)
 
             layout = QGridLayout()
             layout.setContentsMargins(0, 0, 0, 0)
@@ -203,6 +208,12 @@ class DimWidget(QWidget):
             self._updating = False
 
         self.valueChanged.emit(self.xSpin.value(), y)
+
+    def _linkToggled(self, checked):
+        if checked:
+            self.link.setIcon(self.linkIcon)
+        else:
+            self.link.setIcon(self.unlinkIcon)
 
     def values(self):
         return self.xSpin.value(), self.ySpin.value()
@@ -385,7 +396,7 @@ class PreviewWidget(QGraphicsView):
         self._updateRects()
 
 class MainWindow(QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, ctx, parent=None):
         super(MainWindow, self).__init__(parent)
 
         self.inputPDF = None
@@ -434,10 +445,10 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(pageNumBox)
 
         # Scale widget
-        self.cropOrig = DimWidget('X', 'Y')
+        self.cropOrig = DimWidget(ctx, 'X', 'Y')
         self.cropOrig.setLinked(False)
         self.cropOrig.valueChanged.connect(self.preview.setCropOrig)
-        self.cropDim = DimWidget('Width', 'Height')
+        self.cropDim = DimWidget(ctx, 'Width', 'Height')
         self.cropDim.setLinked(False)
         self.cropDim.valueChanged.connect(self.preview.setCropSize)
         self.cropUnits = UnitsComboBox()
@@ -453,7 +464,7 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(cropBox)
 
         # Scale widget
-        self.scale = DimWidget('X', 'Y')
+        self.scale = DimWidget(ctx, 'X', 'Y')
         self.scale.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.cropDim.valueChanged.connect(self.scale.setBaseValues)
         self.preview.setOutputSize(*self.scale.values())
@@ -469,13 +480,13 @@ class MainWindow(QMainWindow):
         formLayout.addWidget(scaleBox)
 
         # Output page size and margin
-        self.outPageSize = DimWidget(compact=True)
+        self.outPageSize = DimWidget(ctx, compact=True)
         self.outPageSize.setBaseUnit(POINTS)
         self.outPageSize.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageSize.setValues(8.5 * 72, 11 * 72)
         self.preview.setPageSize(*self.outPageSize.values())
         self.outPageSize.valueChanged.connect(self.preview.setPageSize)
-        self.outPageMargin = DimWidget(compact=True)
+        self.outPageMargin = DimWidget(ctx, compact=True)
         self.outPageMargin.setBaseUnit(POINTS)
         self.outPageMargin.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
         self.outPageMargin.setValues(0.5 * 72, 0.5 * 72)
@@ -647,12 +658,12 @@ class MainWindow(QMainWindow):
             printOp.run()
 
 if __name__ == '__main__':
-    appctxt = ApplicationContext()
+    ctx = ApplicationContext()
 
     menuBar = QMenuBar();
     openAct = QAction('&Open')
     menuBar.addAction(openAct)
 
-    window = MainWindow()
+    window = MainWindow(ctx)
     window.show()
-    sys.exit(appctxt.app.exec_())
+    sys.exit(ctx.app.exec_())

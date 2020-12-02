@@ -14,7 +14,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
-import fpdf
 from inputPDF import InputPDFFile, InputPDFPage
 from inputImage import InputImage
 import math

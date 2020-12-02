@@ -13,15 +13,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import fpdf
 from inputPDF import InputPDFPage
 from inputImage import InputImage
 import io
 import math
+import os
 import PyPDF2
 from PyQt5.QtCore import Qt, QMetaObject, QRunnable, QSize, Q_ARG
 from PyQt5.QtGui import QBrush, QPageSize, QPainter, QPen, QTransform
 from PyQt5.QtPrintSupport import QPrinter
+import tempfile
 
 class OutputOperation(QRunnable):
     def __init__(self, inPage, cropOrig, cropSize,
@@ -47,6 +48,9 @@ class OutputOperation(QRunnable):
         self.progress = progress
         if self.progress:
             self.progress.setMaximum(self.numPagesX * self.numPagesY + 1)
+
+    def getNumPages(self):
+        return self.numPagesX * self.numPagesY
 
     def wasCanceled(self):
         return self.progress and self.progress.wasCanceled()
@@ -93,10 +97,10 @@ class OutputOperation(QRunnable):
         painter.save()
         painter.setBrush(QBrush(Qt.white))
         painter.setPen(QPen(Qt.NoPen))
-        painter.drawRect(0, 0, mw, ph, 'F')
-        painter.drawRect(0, 0, pw, mh, 'F')
-        painter.drawRect(pw - mw, 0, mw, ph, 'F')
-        painter.drawRect(0, ph - mh, pw, mh, 'F')
+        painter.drawRect(0, 0, mw, ph)
+        painter.drawRect(0, 0, pw, mh)
+        painter.drawRect(pw - mw, 0, mw, ph)
+        painter.drawRect(0, ph - mh, pw, mh)
         painter.restore()
 
     def drawRegistrationMarks(self, painter):
@@ -155,6 +159,35 @@ class OutputOperation(QRunnable):
 
         return painter
 
+    def runPrint(self, printer):
+        painter = self.setupPrinterPainter(printer)
+
+        self.reportProgress(0)
+
+        for y in range(self.numPagesY):
+            for x in range(self.numPagesX):
+                if self.wasCanceled():
+                    return
+
+                self.reportProgress(self.numPagesX * y + x)
+
+                if x > 0 or y > 0:
+                    if not printer.newPage():
+                        raise RuntimeError("Failed to flush the page")
+
+                xt = x * self.printableWidth
+                yt = y * self.printableHeight
+                self.drawInputImage(painter, xt, yt)
+
+                if self.registrationMarks:
+                    self.drawRegistrationMarks(painter)
+
+        self.reportProgress(self.numPagesX * self.numPagesY)
+
+        painter.end()
+
+        self.reportProgress(self.numPagesX * self.numPagesY + 1)
+
 
 class PDFExportOperation(OutputOperation):
     def __init__(self, outFileName, *args, **kwargs):
@@ -163,55 +196,47 @@ class PDFExportOperation(OutputOperation):
         self.outFileName = outFileName
 
     def run(self):
-        if isinstance(self.inPage, InputPDFPage):
-            inReaderPage = self.inPage.getPyPDF2PageObject()
-        elif isinstance(self.inPage, InputImage):
-            # If inPage is an image, turn it into a PDF first.  No,
-            # this isn't the most efficient thing in the world to do
-            # but it works and makes everything simpler.
-            inputSize = self.inPage.getSize()
-            pdf = fpdf.FPDF(unit='pt', format=inputSize)
-            pdf.add_page()
-            pdf.image(self.inPage.tmpFileName,
-                      0, 0, inputSize[0], inputSize[1])
-            data = pdf.output(dest='S').encode('latin-1')
-            reader = PyPDF2.PdfFileReader(io.BytesIO(data))
-            inReaderPage = reader.getPage(0)
-        else:
-            raise TypeError("Invalid page type")
+        if isinstance(self.inPage, InputImage):
+            # If our input is an image, we can render to a PDF using a
+            # QPrinter and not bother with all PyPDF2.
+            printer = QPrinter()
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(self.outFileName)
+            printer.setColorMode(QPrinter.Color)
+            qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
+            printer.setPageSize(qPageSize)
+            self.runPrint(printer)
+            return
+
+        self.reportProgress(0)
+
+        inReaderPage = self.inPage.getPyPDF2PageObject()
 
         overlayPage = None
         if self.trim or self.registrationMarks:
-            pdf = fpdf.FPDF(unit='pt', format=self.pageSize)
-            pdf.add_page()
-            pw = self.pageSize[0]
-            ph = self.pageSize[1]
-            mw = self.pageMargin[0]
-            mh = self.pageMargin[1]
+            with tempfile.TemporaryDirectory(prefix='pdfXplode-tmpPDF') as d:
+                # Print our trimming and registration marks to a temporary
+                # PDF so we can merge it with the input PDF.  Sadly,
+                # QPrinter has no way to print to an in-memory stream so we
+                # have to use a temporary file.
+                tmpFileName = os.path.join(d, 'overlay.pdf')
+                printer = QPrinter()
+                printer.setOutputFormat(QPrinter.PdfFormat)
+                printer.setOutputFileName(tmpFileName)
+                qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
+                printer.setPageSize(qPageSize)
 
-            # We "trim" the page by rendering white in the margins
-            if self.trim:
-                pdf.set_fill_color(255)
-                pdf.rect(0, 0, mw, ph, 'F')
-                pdf.rect(0, 0, pw, mh, 'F')
-                pdf.rect(pw - mw, 0, mw, ph, 'F')
-                pdf.rect(0, ph - mh, pw, mh, 'F')
+                painter = self.setupPrinterPainter(printer)
+                if self.trim:
+                    self.drawWhiteBorder(painter)
+                if self.registrationMarks:
+                    self.drawRegistrationMarks(painter)
+                painter.end()
 
-            if self.registrationMarks:
-                # A caution factor of 90% to keep our registration lines from
-                # running into the main page area
-                cf = 0.9
-                pdf.line(0, mh, mw * cf, mh)
-                pdf.line(mw, 0, mw, mh * cf)
-                pdf.line(pw, mh, pw - mw * cf, mh)
-                pdf.line(pw - mw, 0, pw - mw, mh * cf)
-                pdf.line(0, ph - mh, mw * cf, ph - mh)
-                pdf.line(mw, ph, mw, ph - mh * cf)
-                pdf.line(pw, ph - mh, pw - mw * cf, ph - mh)
-                pdf.line(pw - mw, ph, pw - mw, ph - mh * cf)
+                with open(tmpFileName, 'rb') as f:
+                    overlayPDFBytes = f.read()
 
-            data = pdf.output(dest='S').encode('latin-1')
-            reader = PyPDF2.PdfFileReader(io.BytesIO(data))
+            reader = PyPDF2.PdfFileReader(io.BytesIO(overlayPDFBytes))
             overlayPage = reader.getPage(0)
 
         outPDF = PyPDF2.PdfFileWriter()
@@ -267,28 +292,5 @@ class PrintOperation(OutputOperation):
         qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
         self.printer.setPageSize(qPageSize)
 
-    def getNumPages(self):
-        return self.numPagesX * self.numPagesY
-
     def run(self):
-        painter = self.setupPrinterPainter(self.printer)
-
-        for y in range(self.numPagesY):
-            for x in range(self.numPagesX):
-                if self.wasCanceled():
-                    return
-
-                self.reportProgress(self.numPagesX * y + x)
-
-                if x > 0 or y > 0:
-                    if not self.printer.newPage():
-                        raise RuntimeError("Failed to flush the page")
-
-                xt = x * self.printableWidth
-                yt = y * self.printableHeight
-                self.drawInputImage(painter, xt, yt)
-
-                if self.registrationMarks:
-                    self.drawRegistrationMarks(painter)
-
-        self.reportProgress(self.numPagesX * self.numPagesY + 1)
+        self.runPrint(self.printer)

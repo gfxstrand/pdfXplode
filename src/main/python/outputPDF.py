@@ -71,7 +71,16 @@ class OutputOperation(QRunnable):
         painter.scale(self.outSize[0] / self.cropSize[0],
                       self.outSize[1] / self.cropSize[1])
         painter.translate(-self.cropOrig[0], -self.cropOrig[1])
-        painter.drawImage(0, 0, self.inPage.getQImage())
+
+        # Ask the back-end to scale the image.  It may not.
+        preferredScale = max(painter.device().physicalDpiX() / 72,
+                             painter.device().physicalDpiY() / 72)
+        image = self.inPage.getQImage(preferredScale)
+
+        # Figure out the actual scale
+        painter.scale(self.inPage.getSize()[0] / image.size().width(),
+                      self.inPage.getSize()[1] / image.size().height())
+        painter.drawImage(0, 0, image)
 
         painter.restore()
 
@@ -263,8 +272,6 @@ class PrintOperation(OutputOperation):
 
     def run(self):
         painter = self.setupPrinterPainter(self.printer)
-
-        assert isinstance(self.inPage, InputImage)
 
         for y in range(self.numPagesY):
             for x in range(self.numPagesX):

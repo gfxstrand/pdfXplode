@@ -25,11 +25,13 @@ from PyQt5.QtCore import (
     QThreadPool,
 )
 from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QGraphicsScene,
@@ -48,7 +50,7 @@ from PyQt5.QtWidgets import (
     QWidget
 )
 import os
-from outputPDF import PDFExportOperation
+from outputPDF import PDFExportOperation, PrintOperation
 import sys
 import tempfile
 from units import *
@@ -398,6 +400,10 @@ class MainWindow(QMainWindow):
                                     '&Save PDF')
         self.exportAction.triggered.connect(self.exportFileDialog)
 
+        self.exportAction = QAction(QIcon.fromTheme('document-print'),
+                                    '&Print')
+        self.exportAction.triggered.connect(self.printDialog)
+
         self.quitAction = QAction(QIcon.fromTheme('application-exit'), '&Quit')
         self.quitAction.triggered.connect(self.close)
 
@@ -506,6 +512,11 @@ class MainWindow(QMainWindow):
         self.saveButton.clicked.connect(self.exportFileDialog)
         formLayout.addWidget(self.saveButton)
 
+        self.saveButton = QPushButton('Print')
+        self.saveButton.setIcon(QIcon.fromTheme('document-print'))
+        self.saveButton.clicked.connect(self.printDialog)
+        formLayout.addWidget(self.saveButton)
+
         # A dummy padding widget
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
@@ -585,8 +596,8 @@ class MainWindow(QMainWindow):
         progress.setWindowModality(Qt.WindowModal)
 
         export = PDFExportOperation(
-            self.inputPage,
             fileName,
+            self.inputPage,
             self.cropOrig.values(),
             self.cropDim.values(),
             self.scale.values(),
@@ -620,6 +631,21 @@ class MainWindow(QMainWindow):
         if fname and fname[0]:
             self.exportPDF(fname[0])
 
+    def printDialog(self):
+        printOp = PrintOperation(
+            self.inputPage,
+            self.cropOrig.values(),
+            self.cropDim.values(),
+            self.scale.values(),
+            self.outPageSize.values(),
+            self.outPageMargin.values(),
+            trim=not self.overDraw.isChecked(),
+            registrationMarks=self.registrationMarks.isChecked(),
+            progress=None)
+
+        printDialog = QPrintDialog(printOp.printer, self)
+        if printDialog.exec_() == QDialog.Accepted:
+            printOp.run()
 
 if __name__ == '__main__':
     appctxt = ApplicationContext()

@@ -24,12 +24,8 @@ class InputImage(object):
         # Make a copy of the file in a temporary directory.  This way we
         # can reference it without worrying about the underlying file
         # changing.
-        self.tmpDir = tempfile.TemporaryDirectory(prefix="pdfXplode-inImage")
-        self.tmpFileName = os.path.join(self.tmpDir.name,
-                                        os.path.basename(fileName))
-        shutil.copyfile(fileName, self.tmpFileName)
-
-        self._qImage = None
+        self._qImage = QImage()
+        self._qImage.load(fileName)
 
     def cleanup(self):
         self._qImage = None
@@ -41,12 +37,8 @@ class InputImage(object):
         return units.PIXELS
 
     def getSize(self):
-        size = self.getQImage().size()
+        size = self._qImage.size()
         return (size.width(), size.height())
 
     def getQImage(self, preferredScale=1.0):
-        if self._qImage is None:
-            self._qImage = QImage()
-            self._qImage.load(self.tmpFileName)
-
         return self._qImage

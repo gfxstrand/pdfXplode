@@ -16,6 +16,7 @@
 import os
 from popplerqt5 import Poppler
 import PyPDF2
+from PyQt5.QtCore import QSize
 import shutil
 import tempfile
 import units
@@ -25,7 +26,7 @@ class InputPDFPage(object):
         self.pdfFile = pdfFile
         self.pageNumber = pageNumber
         self.page = pdfFile.doc.page(pageNumber - 1)
-        self._qImageScale = 1.0
+        self._qImageSize = QSize(0, 0)
         self._qImage = None
 
     def cleanup(self):
@@ -42,14 +43,13 @@ class InputPDFPage(object):
         return self.pdfFile.getPyPDF2Reader().getPage(self.pageNumber - 1)
 
     def getSize(self):
-        size = self.page.pageSize()
-        return (size.width(), size.height())
+        return self.page.pageSize()
 
-    def getQImage(self, preferredScale=1.0):
-        if self._qImage is None or self._qImageScale != preferredScale:
-            dpi = 72 * preferredScale
-            self._qImage = self.page.renderToImage(dpi, dpi)
-            self._qImageScale = preferredScale
+    def getQImage(self, sizeHint)
+        if self._qImage is None or self._qImageSize != sizeHint:
+            self._qImage = self.page.renderToImage(sizeHint.width(),
+                                                   sizeHint.height())
+            self._qImageSize = sizeHint
 
         return self._qImage
 

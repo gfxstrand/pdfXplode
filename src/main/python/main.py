@@ -20,6 +20,8 @@ import math
 from PyQt5.QtCore import (
     pyqtSignal,
     Qt,
+    QPoint,
+    QRect,
     QRectF,
     QThreadPool,
 )
@@ -299,14 +301,16 @@ class PreviewWidget(QGraphicsView):
         if not self.inputPage:
             return
 
-        self.image = self.inputPage.getQImage(96 / 72)
+        # We like 96 DPI
+        preferredSize = (self.inputPage.getSize() * 96) / 72
+        self.image = self.inputPage.getQImage(preferredSize)
         self.pixmap = self.scene.addPixmap(QPixmap.fromImage(self.image))
         pageSize = self.inputPage.getSize()
         # Assume it scales the same in both directions
-        assert (pageSize[0] * self.image.height() ==
-                pageSize[1] * self.image.width())
-        self.pixmap.setScale(pageSize[0] / self.image.width())
-        self.setSceneRect(0, 0, pageSize[0], pageSize[1])
+        assert (pageSize.width() * self.image.height() ==
+                pageSizeheight() * self.image.width())
+        self.pixmap.setScale(pageSize.width() / self.image.width())
+        self.setSceneRect(QRect(QPoint(0, 0), pageSize))
         self.setTransform(QTransform().scale(96 / 72, 96 / 72))
 
     def setInputPage(self, page):

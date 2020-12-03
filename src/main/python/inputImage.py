@@ -37,8 +37,7 @@ class InputImage(object):
         return units.PIXELS
 
     def getSize(self):
-        size = self._qImage.size()
-        return (size.width(), size.height())
+        return self._qImage.size()
 
     def getQImage(self, preferredScale=1.0):
         return self._qImage

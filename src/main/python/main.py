@@ -308,9 +308,9 @@ class PreviewWidget(QGraphicsView):
         pageSize = self.inputPage.getSize()
         # Assume it scales the same in both directions
         assert (pageSize.width() * self.image.height() ==
-                pageSizeheight() * self.image.width())
+                pageSize.height() * self.image.width())
         self.pixmap.setScale(pageSize.width() / self.image.width())
-        self.setSceneRect(QRect(QPoint(0, 0), pageSize))
+        self.setSceneRect(QRectF(QRect(QPoint(0, 0), pageSize)))
         self.setTransform(QTransform().scale(96 / 72, 96 / 72))
 
     def setInputPage(self, page):
@@ -534,22 +534,22 @@ class MainWindow(QMainWindow):
 
         size = self.inputPage.getSize()
         self.cropUnits.setAvailableUnits(self.inputPage.getAllowedUnits())
-        self.cropOrig.setMaximums(*size)
-        self.cropOrig.setBaseValues(*size)
+        self.cropOrig.setMaximums(size.width(), size.height())
+        self.cropOrig.setBaseValues(size.width(), size.height())
         self.cropOrig.setValues(0, 0)
         self.cropOrig.setBaseUnit(self.inputPage.getNativeUnit())
         self.cropOrig.setDisplayUnit(self.cropUnits.value())
-        self.cropDim.setMaximums(*size)
-        self.cropDim.setBaseValues(*size)
-        self.cropDim.setValues(*size)
+        self.cropDim.setMaximums(size.width(), size.height())
+        self.cropDim.setBaseValues(size.width(), size.height())
+        self.cropDim.setValues(size.width(), size.height())
         self.cropDim.setBaseUnit(self.inputPage.getNativeUnit())
         self.cropDim.setDisplayUnit(self.cropUnits.value())
         if self.inputPage.getNativeUnit() == POINTS:
             self.scaleUnits.setAvailableUnits([PERCENT, POINTS, INCHES])
         else:
             self.scaleUnits.setAvailableUnits([POINTS, INCHES])
-        self.scale.setBaseValues(*size)
-        self.scale.setValues(*size)
+        self.scale.setBaseValues(size.width(), size.height())
+        self.scale.setValues(size.width(), size.height())
         self.scale.setDisplayUnit(self.scaleUnits.value())
 
     def setPageNumber(self, pageNumber):

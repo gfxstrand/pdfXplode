@@ -45,10 +45,11 @@ class InputPDFPage(object):
     def getSize(self):
         return self.page.pageSize()
 
-    def getQImage(self, sizeHint)
+    def getQImage(self, sizeHint):
         if self._qImage is None or self._qImageSize != sizeHint:
-            self._qImage = self.page.renderToImage(sizeHint.width(),
-                                                   sizeHint.height())
+            xDpi = (sizeHint.width() * 72) / self.page.pageSizeF().width()
+            yDpi = (sizeHint.height() * 72) / self.page.pageSizeF().height()
+            self._qImage = self.page.renderToImage(xDpi, yDpi)
             self._qImageSize = sizeHint
 
         return self._qImage

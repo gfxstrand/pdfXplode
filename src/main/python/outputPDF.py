@@ -77,13 +77,13 @@ class OutputOperation(QRunnable):
         painter.translate(-self.cropOrig[0], -self.cropOrig[1])
 
         # Ask the back-end to scale the image.  It may not.
-        preferredScale = max(painter.device().physicalDpiX() / 72,
-                             painter.device().physicalDpiY() / 72)
-        image = self.inPage.getQImage(preferredScale)
+        sizeHint = QSize(self.outSize[0] * painter.device().physicalDpiX() / 72,
+                         self.outSize[1] * painter.device().physicalDpiY() / 72)
+        image = self.inPage.getQImage(sizeHint)
 
         # Figure out the actual scale
-        painter.scale(self.inPage.getSize()[0] / image.size().width(),
-                      self.inPage.getSize()[1] / image.size().height())
+        painter.scale(self.inPage.getSize().width() / image.size().width(),
+                      self.inPage.getSize().height() / image.size().height())
         painter.drawImage(0, 0, image)
 
         painter.restore()

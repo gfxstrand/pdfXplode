@@ -39,5 +39,5 @@ class InputImage(object):
     def getSize(self):
         return self._qImage.size()
 
-    def getQImage(self, preferredScale=1.0):
+    def getQImage(self, sizeHint=None):
         return self._qImage

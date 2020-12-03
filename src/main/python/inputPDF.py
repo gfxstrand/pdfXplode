@@ -45,11 +45,28 @@ class InputPDFPage(object):
     def getSize(self):
         return self.page.pageSize()
 
-    def getQImage(self, sizeHint):
-        if self._qImage is None or self._qImageSize != sizeHint:
+    def getQImage(self, sizeHint=None):
+        if sizeHint == None:
+            sizeHint = self.page.pageSize()
+
+        assert sizeHint.width() > 1 and sizeHint.height() > 1
+
+        if self._qImageSize != sizeHint:
+            self._qImage = None
+
+        while self._qImage is None:
             xDpi = (sizeHint.width() * 72) / self.page.pageSizeF().width()
             yDpi = (sizeHint.height() * 72) / self.page.pageSizeF().height()
-            self._qImage = self.page.renderToImage(xDpi, yDpi)
+            image = self.page.renderToImage(xDpi, yDpi)
+
+            # If we ask to render an image that's too large, it will return
+            # an empty 1x1 image.  Contrary to what the Poppler docs say,
+            # it does not return a null image
+            if image.isNull() or image.size() == QSize(1, 1):
+                sizeHint /= 2
+                continue
+
+            self._qImage = image
             self._qImageSize = sizeHint
 
         return self._qImage

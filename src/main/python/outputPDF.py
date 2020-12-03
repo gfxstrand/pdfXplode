@@ -19,10 +19,150 @@ import io
 import math
 import os
 import PyPDF2
-from PyQt5.QtCore import Qt, QMetaObject, QRunnable, QSize, Q_ARG
+from PyQt5.QtCore import Qt, QMetaObject, QPoint, QRect, QRunnable, QSize, Q_ARG
 from PyQt5.QtGui import QBrush, QPageSize, QPainter, QPen, QTransform
 from PyQt5.QtPrintSupport import QPrinter
 import tempfile
+
+def _paintWhiteBorder(printer, painter):
+    page = printer.pageLayout().fullRectPoints()
+    margin = printer.pageLayout().marginsPoints()
+
+    painter.save()
+    painter.setBrush(QBrush(Qt.white))
+    painter.setPen(QPen(Qt.NoPen))
+    painter.drawRect(0, 0, margin.left(), page.height())
+    painter.drawRect(0, 0, page.width(), margin.top())
+    painter.drawRect(page.width() - margin.right(), 0,
+                     margin.right(), page.height())
+    painter.drawRect(0, page.height() - margin.bottom(),
+                     page.width(), margin.bottom())
+    painter.restore()
+
+
+def _paintRegistrationMarks(printer, painter):
+    page = printer.pageLayout().fullRectPoints()
+    margin = printer.pageLayout().marginsPoints()
+
+    # Get ourselves some nice abbreviations
+    pw = page.width()
+    ph = page.height()
+    ml = margin.left()
+    mr = margin.right()
+    mt = margin.top()
+    mb = margin.bottom()
+
+    # A caution factor of 90% to keep our registration lines from
+    # running into the main page area
+    cf = 0.9
+
+    pen = QPen()
+    pen.setStyle(Qt.SolidLine)
+    pen.setWidth(1)
+    pen.setBrush(Qt.black)
+
+    painter.save()
+    painter.setPen(pen)
+    painter.drawLine(0, mt, ml * cf, mt)
+    painter.drawLine(ml, 0, ml, mt * cf)
+    painter.drawLine(pw, mt, pw - mr * cf, mt)
+    painter.drawLine(pw - mr, 0, pw - mr, mt * cf)
+    painter.drawLine(0, ph - mb, ml * cf, ph - mb)
+    painter.drawLine(ml, ph, ml, ph - mb * cf)
+    painter.drawLine(pw, ph - mb, pw - mr * cf, ph - mb)
+    painter.drawLine(pw - mr, ph, pw - mr, ph - mb * cf)
+    painter.restore()
+
+
+def _makePainter(printer):
+    # We'll deal with margins ourselves, thank you.
+    printer.setFullPage(True)
+
+    painter = QPainter()
+    if not painter.begin(printer):
+        raise RuntimeError("Failed to open printer, is it writable?")
+
+    painter.setRenderHint(QPainter.LosslessImageRendering, True)
+
+    pageSizePoints = printer.pageLayout().fullRectPoints().size()
+    pageSizeLogical = QSize(
+        (pageSizePoints.width() * printer.logicalDpiX()) / 72,
+        (pageSizePoints.height() * printer.logicalDpiY()) / 72)
+
+    painter.setWindow(QRect(QPoint(0, 0), pageSizePoints))
+    painter.setViewport(QRect(QPoint(0, 0), pageSizeLogical))
+
+    return painter
+
+
+def printOverlayPage(printer, trim=False, registrationMarks=False):
+    painter = _makePainter(printer)
+
+    if trim:
+        _paintWhiteBorder(printer, painter)
+
+    if registrationMarks:
+        _paintRegistrationMarks(printer, painter)
+
+    painter.end()
+
+
+def printInputImage(printer, inPage, cropRect, outSize,
+                    trim=False, registrationMarks=False,
+                    progress=None):
+    painter = _makePainter(printer)
+
+    fullRect = printer.pageLayout().fullRectPoints()
+    margin = printer.pageLayout().marginsPoints()
+
+    printableWidth = fullRect.width() - margin.left() - margin.right()
+    printableHeight = fullRect.height() - margin.top() - margin.bottom()
+
+    numPagesX = math.ceil(outSize.width() / printableWidth)
+    numPagesY = math.ceil(outSize.height() / printableHeight)
+    numPages = numPagesX * numPagesY
+
+    imageSizeHint = QSize(
+        inPage.getSize().width() * outSize.width() / cropRect.width(),
+        inPage.getSize().height() * outSize.height() / cropRect.height())
+    image = inPage.getQImage(imageSizeHint)
+
+    for y in range(numPagesY):
+        for x in range(numPagesX):
+            percentComplete = ((numPagesX * y + x) * 100) // numPages
+            if progress and not progress(percentComplete):
+                printer.abort()
+                return
+
+            if x > 0 or y > 0:
+                if not printer.newPage():
+                    raise RuntimeError("Failed to flush the page")
+
+            if registrationMarks:
+                _paintRegistrationMarks(printer, painter)
+
+            painter.save()
+
+            if trim:
+                painter.setClipRect(margin.left(), margin.top(),
+                                    printableWidth, printableHeight)
+
+            painter.translate(margin.left(), margin.top())
+            painter.translate(-x * printableWidth, -y * printableHeight)
+            painter.scale(outSize.width() / cropRect.width(),
+                          outSize.height() / cropRect.height())
+            painter.translate(-cropRect.x(), -cropRect.y())
+
+            painter.scale(inPage.getSize().width() / image.size().width(),
+                          inPage.getSize().height() / image.size().height())
+            painter.drawImage(0, 0, image)
+
+            painter.restore()
+
+    painter.end()
+
+    if progress:
+        progress(100)
 
 class OutputOperation(QRunnable):
     def __init__(self, inPage, cropRect, outSize,
@@ -85,21 +225,6 @@ class OutputOperation(QRunnable):
                       self.inPage.getSize().height() / image.size().height())
         painter.drawImage(0, 0, image)
 
-        painter.restore()
-
-    def drawWhiteBorder(self, painter):
-        pw = self.pageSize[0]
-        ph = self.pageSize[1]
-        mw = self.pageMargin[0]
-        mh = self.pageMargin[1]
-
-        painter.save()
-        painter.setBrush(QBrush(Qt.white))
-        painter.setPen(QPen(Qt.NoPen))
-        painter.drawRect(0, 0, mw, ph)
-        painter.drawRect(0, 0, pw, mh)
-        painter.drawRect(pw - mw, 0, mw, ph)
-        painter.drawRect(0, ph - mh, pw, mh)
         painter.restore()
 
     def drawRegistrationMarks(self, painter):
@@ -204,7 +329,20 @@ class PDFExportOperation(OutputOperation):
             printer.setColorMode(QPrinter.Color)
             qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
             printer.setPageSize(qPageSize)
-            self.runPrint(printer)
+            printer.setPageMargins(self.pageMargin[0], self.pageMargin[1],
+                                   self.pageMargin[0], self.pageMargin[1],
+                                   QPrinter.Point)
+
+            def progress(p):
+                if self.wasCanceled():
+                    return False
+                numPages = self.numPagesX * self.numPagesY + 1
+                self.reportProgress(p * numPages / 100)
+                return True
+
+            printInputImage(printer, self.inPage, self.cropRect,
+                            self.outSize, self.trim, self.registrationMarks,
+                            progress=progress)
             return
 
         self.reportProgress(0)
@@ -224,13 +362,10 @@ class PDFExportOperation(OutputOperation):
                 printer.setOutputFileName(tmpFileName)
                 qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
                 printer.setPageSize(qPageSize)
-
-                painter = self.setupPrinterPainter(printer)
-                if self.trim:
-                    self.drawWhiteBorder(painter)
-                if self.registrationMarks:
-                    self.drawRegistrationMarks(painter)
-                painter.end()
+                printer.setPageMargins(self.pageMargin[0], self.pageMargin[1],
+                                       self.pageMargin[0], self.pageMargin[1],
+                                       QPrinter.Point)
+                printOverlayPage(printer, self.trim, self.registrationMarks)
 
                 with open(tmpFileName, 'rb') as f:
                     overlayPDFBytes = f.read()

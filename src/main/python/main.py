@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
 
         progress.show()
 
-        QThreadPool.globalInstance().start(export)
+        export.runInThread()
 
     def openFileDialog(self):
         filters = 'PDF files (*.pdf);;Images (*.png *.jpg)'

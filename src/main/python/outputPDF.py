@@ -19,8 +19,25 @@ import io
 import math
 import os
 import PyPDF2
-from PyQt5.QtCore import Qt, QMetaObject, QPoint, QRect, QRunnable, QSize, Q_ARG
-from PyQt5.QtGui import QBrush, QPageSize, QPainter, QPen, QTransform
+from PyQt5.QtCore import QPoint, QRect, QSize
+from PyQt5.QtCore import (
+    pyqtSignal,
+    Qt,
+    QMarginsF,
+    QMetaObject,
+    QObject,
+    QRunnable,
+    QThreadPool,
+    Q_ARG
+)
+from PyQt5.QtGui import (
+    QBrush,
+    QPageLayout,
+    QPageSize,
+    QPainter,
+    QPen,
+    QTransform,
+)
 from PyQt5.QtPrintSupport import QPrinter
 import tempfile
 
@@ -163,6 +180,162 @@ def printInputImage(printer, inPage, cropRect, outSize,
 
     if progress:
         progress(100)
+
+
+def generatePDF(fileName, inPage, cropRect, outSize,
+                pageLayout, trim=False, registrationMarks=False,
+                progress=None):
+    if isinstance(inPage, InputImage):
+        printer = QPrinter()
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(fileName)
+        printer.setColorMode(QPrinter.Color)
+        printer.setPageLayout(pageLayout)
+        printInputImage(printer, inPage, cropRect, outSize,
+                        trim, registrationMarks, progress)
+        return
+
+    inReaderPage = inPage.getPyPDF2PageObject()
+
+    overlayPage = None
+    if trim or registrationMarks:
+        with tempfile.TemporaryDirectory(prefix='pdfXplode-tmpPDF') as d:
+            # Print our trimming and registration marks to a temporary
+            # PDF so we can merge it with the input PDF.  Sadly,
+            # QPrinter has no way to print to an in-memory stream so we
+            # have to use a temporary file.
+            tmpFileName = os.path.join(d, 'overlay.pdf')
+
+            printer = QPrinter()
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(tmpFileName)
+            printer.setPageLayout(pageLayout)
+            printOverlayPage(printer, trim, registrationMarks)
+
+            with open(tmpFileName, 'rb') as f:
+                overlayPDFBytes = f.read()
+
+        reader = PyPDF2.PdfFileReader(io.BytesIO(overlayPDFBytes))
+        overlayPage = reader.getPage(0)
+
+    fullRect = printer.pageLayout().fullRectPoints()
+    margin = printer.pageLayout().marginsPoints()
+
+    printableWidth = fullRect.width() - margin.left() - margin.right()
+    printableHeight = fullRect.height() - margin.top() - margin.bottom()
+
+    numPagesX = math.ceil(outSize.width() / printableWidth)
+    numPagesY = math.ceil(outSize.height() / printableHeight)
+    numPages = numPagesX * numPagesY
+
+    outPDF = PyPDF2.PdfFileWriter()
+
+    for y in range(numPagesY):
+        for x in range(numPagesX):
+            percentComplete = ((numPagesX * y + x) * 100) // (numPages + 1)
+            if progress and not progress(percentComplete):
+                return
+
+            xt = x * printableWidth
+            yt = y * printableHeight
+
+            # PDF coordinates start at the bottom-left but everything
+            # else is top-down so flip the Y transform
+            yt = outSize.height() - yt - printableHeight
+
+            xform = QTransform()
+            xform.translate(margin.left(), margin.bottom())
+            xform.translate(-xt, -yt)
+            xform.scale(outSize.width() / cropRect.width(),
+                        outSize.height() / cropRect.height())
+            xform.translate(-cropRect.x(), -cropRect.y())
+            assert xform.isAffine()
+            ctm = (
+                xform.m11(),
+                xform.m12(),
+                xform.m21(),
+                xform.m22(),
+                xform.m31(),
+                xform.m32()
+            )
+            page = outPDF.addBlankPage(fullRect.width(), fullRect.height())
+            page.mergeTransformedPage(inReaderPage, ctm)
+
+            if overlayPage:
+                page.mergePage(overlayPage)
+
+    if progress:
+        progress((numPages * 100) // (numPages + 1))
+
+    with open(fileName, 'wb') as f:
+        outPDF.write(f)
+
+    if progress:
+        progress(100)
+
+
+class ThreadedOperationRunnable(QRunnable):
+    progress = pyqtSignal(int)
+
+    def __init__(self, func, *args, **kwargs):
+        super(ThreadedOperationRunnable, self).__init__()
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        self.func(*self.args, **self.kwargs)
+
+
+class ThreadedOperation(QObject):
+    progress = pyqtSignal(int)
+
+    def __init__(self, func, *args, **kwargs):
+        super(ThreadedOperation, self).__init__()
+
+        # Patch through our own _reportProgress which marshals through Qt
+        # threads so we end up with the signal happening on the UI thread.
+        assert 'progress' not in kwargs
+        kwargs['progress'] = self._reportProgress
+
+        self._runnable = ThreadedOperationRunnable(func, *args, **kwargs)
+        self._canceled = False
+
+    def _reportProgress(self, p):
+        QMetaObject.invokeMethod(self, "progress",
+                                 Qt.QueuedConnection,
+                                 Q_ARG(int, p))
+        return not self._canceled;
+
+    def cancel(self):
+        self._canceled = True
+
+    def run(self):
+        self._runnable.run()
+
+    def runInThread(self):
+        QThreadPool.globalInstance().start(self._runnable)
+
+
+def PDFExportOperation(fileName, inPage, cropRect, outSize,
+                       pageSize, pageMargin, trim=False,
+                       registrationMarks=False, progress=None):
+    # Convert to a Qt page layout
+    pageSize = QPageSize(QSize(*pageSize))
+    pageMargin = QMarginsF(*pageMargin, *pageMargin)
+    pageLayout = QPageLayout(pageSize, QPageLayout.Portrait, pageMargin)
+
+    op = ThreadedOperation(generatePDF, fileName, inPage, cropRect,
+                           outSize, pageLayout, trim, registrationMarks)
+
+    if progress:
+        progress.setMaximum(100)
+        progress.setValue(0)
+        op.progress.connect(progress.setValue)
+        progress.canceled.connect(op.cancel)
+
+    return op
+
 
 class OutputOperation(QRunnable):
     def __init__(self, inPage, cropRect, outSize,
@@ -312,110 +485,6 @@ class OutputOperation(QRunnable):
 
         self.reportProgress(self.numPagesX * self.numPagesY + 1)
 
-
-class PDFExportOperation(OutputOperation):
-    def __init__(self, outFileName, *args, **kwargs):
-        super(PDFExportOperation, self).__init__(*args, **kwargs)
-
-        self.outFileName = outFileName
-
-    def run(self):
-        if isinstance(self.inPage, InputImage):
-            # If our input is an image, we can render to a PDF using a
-            # QPrinter and not bother with all PyPDF2.
-            printer = QPrinter()
-            printer.setOutputFormat(QPrinter.PdfFormat)
-            printer.setOutputFileName(self.outFileName)
-            printer.setColorMode(QPrinter.Color)
-            qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
-            printer.setPageSize(qPageSize)
-            printer.setPageMargins(self.pageMargin[0], self.pageMargin[1],
-                                   self.pageMargin[0], self.pageMargin[1],
-                                   QPrinter.Point)
-
-            def progress(p):
-                if self.wasCanceled():
-                    return False
-                numPages = self.numPagesX * self.numPagesY + 1
-                self.reportProgress(p * numPages / 100)
-                return True
-
-            printInputImage(printer, self.inPage, self.cropRect,
-                            self.outSize, self.trim, self.registrationMarks,
-                            progress=progress)
-            return
-
-        self.reportProgress(0)
-
-        inReaderPage = self.inPage.getPyPDF2PageObject()
-
-        overlayPage = None
-        if self.trim or self.registrationMarks:
-            with tempfile.TemporaryDirectory(prefix='pdfXplode-tmpPDF') as d:
-                # Print our trimming and registration marks to a temporary
-                # PDF so we can merge it with the input PDF.  Sadly,
-                # QPrinter has no way to print to an in-memory stream so we
-                # have to use a temporary file.
-                tmpFileName = os.path.join(d, 'overlay.pdf')
-                printer = QPrinter()
-                printer.setOutputFormat(QPrinter.PdfFormat)
-                printer.setOutputFileName(tmpFileName)
-                qPageSize = QPageSize(QSize(self.pageSize[0], self.pageSize[1]))
-                printer.setPageSize(qPageSize)
-                printer.setPageMargins(self.pageMargin[0], self.pageMargin[1],
-                                       self.pageMargin[0], self.pageMargin[1],
-                                       QPrinter.Point)
-                printOverlayPage(printer, self.trim, self.registrationMarks)
-
-                with open(tmpFileName, 'rb') as f:
-                    overlayPDFBytes = f.read()
-
-            reader = PyPDF2.PdfFileReader(io.BytesIO(overlayPDFBytes))
-            overlayPage = reader.getPage(0)
-
-        outPDF = PyPDF2.PdfFileWriter()
-
-        for y in range(self.numPagesY):
-            for x in range(self.numPagesX):
-                if self.wasCanceled():
-                    return
-
-                self.reportProgress(self.numPagesX * y + x)
-
-                xt = x * self.printableWidth
-                yt = y * self.printableHeight
-
-                # PDF coordinates start at the bottom-left but everything
-                # else is top-down so flip the Y transform
-                yt = self.outSize.height() - yt - self.printableHeight
-
-                xform = QTransform()
-                xform.translate(self.pageMargin[0], self.pageMargin[1])
-                xform.translate(-xt, -yt)
-                xform.scale(self.outSize.width() / self.cropRect.width(),
-                            self.outSize.height() / self.cropRect.height())
-                xform.translate(-self.cropRect.x(), -self.cropRect.y())
-                assert xform.isAffine()
-                ctm = (
-                    xform.m11(),
-                    xform.m12(),
-                    xform.m21(),
-                    xform.m22(),
-                    xform.m31(),
-                    xform.m32()
-                )
-                page = outPDF.addBlankPage(self.pageSize[0], self.pageSize[1])
-                page.mergeTransformedPage(inReaderPage, ctm)
-
-                if overlayPage:
-                    page.mergePage(overlayPage)
-
-        self.reportProgress(self.numPagesX * self.numPagesY)
-
-        with open(self.outFileName, 'wb') as f:
-            outPDF.write(f)
-
-        self.reportProgress(self.numPagesX * self.numPagesY + 1)
 
 class PrintOperation(OutputOperation):
     def __init__(self, *args, **kwargs):

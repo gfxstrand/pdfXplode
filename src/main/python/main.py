@@ -25,29 +25,7 @@ from PyQt5.QtCore import (
 )
 from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
-from PyQt5.QtWidgets import (
-    QAction,
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QFileDialog,
-    QGraphicsScene,
-    QGraphicsView,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QMenuBar,
-    QProgressDialog,
-    QPushButton,
-    QSizePolicy,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget
-)
+from PyQt5.QtWidgets import *
 import os
 from outputPDF import PDFExportOperation, PrintOperation
 import sys

@@ -27,10 +27,10 @@ from PyQt5.QtCore import (
     QThreadPool,
 )
 from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
-from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
+from PyQt5.QtPrintSupport import *
 from PyQt5.QtWidgets import *
 import os
-from outputPDF import PDFExportOperation, PrintOperation
+from outputPDF import PDFExportOperation, ThreadedOperation, printInputImage
 import sys
 import tempfile
 from units import *
@@ -461,36 +461,6 @@ class MainWindow(QMainWindow):
         scaleBox.setLayout(layout)
         formLayout.addWidget(scaleBox)
 
-        # Output page size and margin
-        self.outPageSize = DimWidget(ctx, compact=True)
-        self.outPageSize.setBaseUnit(POINTS)
-        self.outPageSize.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
-        self.outPageSize.setValues(8.5 * 72, 11 * 72)
-        self.preview.setPageSize(*self.outPageSize.values())
-        self.outPageSize.valueChanged.connect(self.preview.setPageSize)
-        self.outPageMargin = DimWidget(ctx, compact=True)
-        self.outPageMargin.setBaseUnit(POINTS)
-        self.outPageMargin.setMaximums(MILE_IN_POINTS, MILE_IN_POINTS)
-        self.outPageMargin.setValues(0.5 * 72, 0.5 * 72)
-        self.preview.setPageMargin(*self.outPageMargin.values())
-        self.outPageMargin.valueChanged.connect(self.preview.setPageMargin)
-        self.outPageUnits = UnitsComboBox()
-        self.outPageUnits.setAvailableUnits([POINTS, INCHES])
-        self.outPageSize.setDisplayUnit(self.outPageUnits.value())
-        self.outPageUnits.valueChanged.connect(self.outPageSize.setDisplayUnit)
-        self.outPageMargin.setDisplayUnit(self.outPageUnits.value())
-        self.outPageUnits.valueChanged.connect(self.outPageMargin.setDisplayUnit)
-        outPageBox = QGroupBox()
-        outPageBox.setTitle('Output Page')
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel('Size:'))
-        layout.addWidget(self.outPageSize)
-        layout.addWidget(QLabel('Margin:'))
-        layout.addWidget(self.outPageMargin)
-        layout.addWidget(self.outPageUnits)
-        outPageBox.setLayout(layout)
-        formLayout.addWidget(outPageBox)
-
         self.registrationMarks = QCheckBox('Registration Marks')
         self.registrationMarks.setChecked(True)
         formLayout.addWidget(self.registrationMarks)
@@ -625,19 +595,37 @@ class MainWindow(QMainWindow):
             self.exportPDF(fname[0])
 
     def printDialog(self):
-        printOp = PrintOperation(
-            self.inputPage,
-            QRect(*self.cropOrig.values(), *self.cropDim.values()),
-            QSize(*self.scale.values()),
-            self.outPageSize.values(),
-            self.outPageMargin.values(),
-            trim=not self.overDraw.isChecked(),
-            registrationMarks=self.registrationMarks.isChecked(),
-            progress=None)
+        printer = QPrinter()
+        printer.setColorMode(QPrinter.Color)
 
-        printDialog = QPrintDialog(printOp.printer, self)
-        if printDialog.exec_() == QDialog.Accepted:
-            printOp.run()
+        cropRect = QRect(*self.cropOrig.values(), *self.cropDim.values())
+        outSize = QSize(*self.scale.values())
+        trim = not self.overDraw.isChecked()
+        registrationMarks = self.registrationMarks.isChecked()
+
+        def paintPreview(printer):
+            printInputImage(printer, self.inputPage, cropRect,
+                            outSize, trim, registrationMarks)
+
+        preview = QPrintPreviewDialog(printer)
+        preview.paintRequested.connect(paintPreview)
+        if preview.exec() == QDialog.Rejected:
+            return
+
+        progress = QProgressDialog(self)
+        progress.setLabelText("Printing...")
+        progress.setCancelButtonText("Cancel")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMaximum(100)
+
+        op = ThreadedOperation(printInputImage, printer, self.inputPage,
+                               cropRect, outSize, trim, registrationMarks)
+        op.progress.connect(progress.setValue)
+        op.runInThread()
+
+        if progress.exec() == QDialog.Rejected:
+            op.cancel()
+
 
 if __name__ == '__main__':
     ctx = ApplicationContext()

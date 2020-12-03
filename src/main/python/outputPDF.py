@@ -325,32 +325,6 @@ class ThreadedOperation(QObject):
         QThreadPool.globalInstance().start(self._runnable)
 
 
-class PrintOperation(ThreadedOperation):
-    def __init__(self, inPage, cropRect, outSize,
-                 pageSize, pageMargin, trim=False,
-                 registrationMarks=False, progress=None):
-        # Convert to a Qt page layout
-        pageSize = QPageSize(QSize(*pageSize))
-        pageMargin = QMarginsF(*pageMargin, *pageMargin)
-        pageLayout = QPageLayout(pageSize, QPageLayout.Portrait, pageMargin)
-
-        printer = QPrinter()
-        printer.setColorMode(QPrinter.Color)
-        printer.setPageLayout(pageLayout)
-
-        super(PrintOperation, self).__init__(printInputImage, printer,
-                                             inPage, cropRect, outSize,
-                                             trim, registrationMarks)
-
-        self.printer = printer
-
-        if progress:
-            progress.setMaximum(100)
-            progress.setValue(0)
-            self.progress.connect(progress.setValue)
-            progress.canceled.connect(self.cancel)
-
-
 def PDFExportOperation(fileName, inPage, cropRect, outSize,
                        pageSize, pageMargin, trim=False,
                        registrationMarks=False, progress=None):

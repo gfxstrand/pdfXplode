@@ -324,15 +324,15 @@ class PreviewWidget(QGraphicsView):
             self.scene.removeItem(r)
         self.pageRectItems = []
 
-        printSize = (self.pageSize[0] - 2 * self.pageMargin[0],
-                     self.pageSize[1] - 2 * self.pageMargin[1])
-        if printSize[0] == 0 or printSize[1] == 0:
-            return
-
         cropRect = QRectF(self.cropOrig[0], self.cropOrig[1],
                           self.cropSize[0], self.cropSize[1])
         self.cropRectItem = self.scene.addRect(cropRect, pen=self.cropPen,
                                                brush=QBrush(Qt.NoBrush))
+
+        printSize = (self.pageSize[0] - 2 * self.pageMargin[0],
+                     self.pageSize[1] - 2 * self.pageMargin[1])
+        if printSize[0] == 0 or printSize[1] == 0:
+            return
 
         numPagesX = math.ceil(self.outputSize[0] / printSize[0])
         numPagesY = math.ceil(self.outputSize[1] / printSize[1])

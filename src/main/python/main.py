@@ -23,6 +23,7 @@ from PyQt5.QtCore import (
     QPoint,
     QRect,
     QRectF,
+    QSize,
     QThreadPool,
 )
 from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
@@ -591,9 +592,8 @@ class MainWindow(QMainWindow):
         export = PDFExportOperation(
             fileName,
             self.inputPage,
-            self.cropOrig.values(),
-            self.cropDim.values(),
-            self.scale.values(),
+            QRect(*self.cropOrig.values(), *self.cropDim.values()),
+            QSize(*self.scale.values()),
             self.outPageSize.values(),
             self.outPageMargin.values(),
             trim=not self.overDraw.isChecked(),
@@ -627,9 +627,8 @@ class MainWindow(QMainWindow):
     def printDialog(self):
         printOp = PrintOperation(
             self.inputPage,
-            self.cropOrig.values(),
-            self.cropDim.values(),
-            self.scale.values(),
+            QRect(*self.cropOrig.values(), *self.cropDim.values()),
+            QSize(*self.scale.values()),
             self.outPageSize.values(),
             self.outPageMargin.values(),
             trim=not self.overDraw.isChecked(),

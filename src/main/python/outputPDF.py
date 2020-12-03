@@ -25,14 +25,13 @@ from PyQt5.QtPrintSupport import QPrinter
 import tempfile
 
 class OutputOperation(QRunnable):
-    def __init__(self, inPage, cropOrig, cropSize,
-                 outSize, pageSize, pageMargin, trim=False,
+    def __init__(self, inPage, cropRect, outSize,
+                 pageSize, pageMargin, trim=False,
                  registrationMarks=False, progress=None):
         super(OutputOperation, self).__init__()
 
         self.inPage = inPage
-        self.cropOrig = cropOrig
-        self.cropSize = cropSize
+        self.cropRect = cropRect
         self.outSize = outSize
         self.pageSize = pageSize
         self.pageMargin = pageMargin
@@ -42,8 +41,8 @@ class OutputOperation(QRunnable):
         self.printableWidth = pageSize[0] - 2 * pageMargin[0]
         self.printableHeight = pageSize[1] - 2 * pageMargin[1]
 
-        self.numPagesX = math.ceil(outSize[0] / self.printableWidth)
-        self.numPagesY = math.ceil(outSize[1] / self.printableHeight)
+        self.numPagesX = math.ceil(outSize.width() / self.printableWidth)
+        self.numPagesY = math.ceil(outSize.height() / self.printableHeight)
 
         self.progress = progress
         if self.progress:
@@ -72,13 +71,13 @@ class OutputOperation(QRunnable):
 
         painter.translate(self.pageMargin[0], self.pageMargin[1])
         painter.translate(-xt, -yt)
-        painter.scale(self.outSize[0] / self.cropSize[0],
-                      self.outSize[1] / self.cropSize[1])
-        painter.translate(-self.cropOrig[0], -self.cropOrig[1])
+        painter.scale(self.outSize.width() / self.cropRect.width(),
+                      self.outSize.height() / self.cropRect.height())
+        painter.translate(-self.cropRect.x(), -self.cropRect.y())
 
         # Ask the back-end to scale the image.  It may not.
-        sizeHint = QSize(self.outSize[0] * painter.device().physicalDpiX() / 72,
-                         self.outSize[1] * painter.device().physicalDpiY() / 72)
+        sizeHint = QSize(self.outSize.width() * painter.device().physicalDpiX() / 72,
+                         self.outSize.height() * painter.device().physicalDpiY() / 72)
         image = self.inPage.getQImage(sizeHint)
 
         # Figure out the actual scale
@@ -253,14 +252,14 @@ class PDFExportOperation(OutputOperation):
 
                 # PDF coordinates start at the bottom-left but everything
                 # else is top-down so flip the Y transform
-                yt = self.outSize[1] - yt - self.printableHeight
+                yt = self.outSize.height() - yt - self.printableHeight
 
                 xform = QTransform()
                 xform.translate(self.pageMargin[0], self.pageMargin[1])
                 xform.translate(-xt, -yt)
-                xform.scale(self.outSize[0] / self.cropSize[0],
-                            self.outSize[1] / self.cropSize[1])
-                xform.translate(-self.cropOrig[0], -self.cropOrig[1])
+                xform.scale(self.outSize.width() / self.cropRect.width(),
+                            self.outSize.height() / self.cropRect.height())
+                xform.translate(-self.cropRect.x(), -self.cropRect.y())
                 assert xform.isAffine()
                 ctm = (
                     xform.m11(),

@@ -388,9 +388,8 @@ class MainWindow(QMainWindow):
                                     '&Save PDF')
         self.exportAction.triggered.connect(self.exportFileDialog)
 
-        self.exportAction = QAction(QIcon.fromTheme('document-print'),
-                                    '&Print')
-        self.exportAction.triggered.connect(self.printDialog)
+        self.printAction = QAction(QIcon.fromTheme('document-print'), '&Print')
+        self.printAction.triggered.connect(self.printDialog)
 
         self.quitAction = QAction(QIcon.fromTheme('application-exit'), '&Quit')
         self.quitAction.triggered.connect(self.close)
@@ -520,6 +519,8 @@ class MainWindow(QMainWindow):
         menuBar = self.menuBar()
         fileMenu = menuBar.addMenu('&File')
         fileMenu.addAction(self.openAction)
+        fileMenu.addAction(self.exportAction)
+        fileMenu.addAction(self.printAction)
         fileMenu.addSeparator()
         fileMenu.addAction(self.quitAction)
 

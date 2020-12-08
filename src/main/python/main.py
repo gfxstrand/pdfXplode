@@ -213,6 +213,9 @@ class DimWidget(QWidget):
             self.ySpin.setScale(scale)
 
     def setBaseValues(self, xBase, yBase):
+        if xBase == 0 or yBase == 0:
+            return
+
         if xBase == self.xBase and yBase == self.yBase:
             return
 

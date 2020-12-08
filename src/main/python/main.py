@@ -652,24 +652,8 @@ class MainWindow(QMainWindow):
 
         preview = QPrintPreviewDialog(printer)
         preview.paintRequested.connect(paintPreview)
-        if preview.exec() == QDialog.Rejected:
-            return
-
-        savePageLayout(settings, "output/page-layout", printer.pageLayout())
-
-        progress = QProgressDialog(self)
-        progress.setLabelText("Printing...")
-        progress.setCancelButtonText("Cancel")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.setMaximum(100)
-
-        op = ThreadedOperation(printInputImage, printer, self.inputPage,
-                               cropRect, outSize, trim, registrationMarks)
-        op.progress.connect(progress.setValue)
-        op.runInThread()
-
-        if progress.exec() == QDialog.Rejected:
-            op.cancel()
+        if preview.exec() == QDialog.Accepted:
+            savePageLayout(settings, "output/page-layout", printer.pageLayout())
 
 
 if __name__ == '__main__':

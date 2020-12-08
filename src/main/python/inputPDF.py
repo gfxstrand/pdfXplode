@@ -14,12 +14,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-from popplerqt5 import Poppler
-import PyPDF2
 from PyQt5.QtCore import QSize
 import shutil
 import tempfile
 import units
+
+try:
+    import PyPDF2
+    from popplerqt5 import Poppler
+    hasPDFInput = True
+except ImportError:
+    hasPDFInput = False
 
 class InputPDFPage(object):
     def __init__(self, pdfFile, pageNumber):

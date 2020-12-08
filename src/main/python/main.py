@@ -14,7 +14,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from fbs_runtime.application_context.PyQt5 import ApplicationContext
-from inputPDF import InputPDFFile, InputPDFPage
+from inputPDF import hasPDFInput, InputPDFFile
 from inputImage import InputImage
 import math
 from PyQt5.QtCore import *
@@ -580,14 +580,20 @@ class MainWindow(QMainWindow):
         self._updatePageSize()
 
     def openFileDialog(self):
-        filters = 'PDF files (*.pdf);;Images (*.png *.jpg)'
+        allFileExts = '*.png *.jpg'
+        filters = ';;Images (*.png *.jpg)'
+        if hasPDFInput:
+            allFileExts += ' *.pdf'
+            filters += ';;PDF files (*.pdf)'
+        filters = 'All supported files (' + allFileExts + ')' + filters
+
         fname = QFileDialog.getOpenFileName(self, 'Open input file',
                                             filter=filters)
         if not fname or not fname[0]:
             return # Canceled
 
         ext = os.path.splitext(fname[0])[1].lower()
-        if ext == '.pdf':
+        if ext == '.pdf' and hasPDFInput:
             self.loadPDF(fname[0])
         elif ext in ('.png', '.jpg'):
             self.loadImage(fname[0])

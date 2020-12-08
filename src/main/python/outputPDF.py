@@ -132,8 +132,9 @@ def printInputImage(printer, inPage, cropRect, outSize,
         # In this case, we're outputting a PDF from another PDF.  We can
         # output a higher quality PDF if we do it manually with PyPDF2.
         printer.abort()
-        generatePDF(printer.outputFileName(), inPage, cropRect, outSize,
-                    printer.pageLayout(), trim, registrationMarks, progress)
+        generatePDFFromPDF(printer.outputFileName(), inPage, cropRect, outSize,
+                           printer.pageLayout(), trim, registrationMarks,
+                           progress)
         return
 
     painter = _makePainter(printer)
@@ -198,19 +199,10 @@ def printInputImage(printer, inPage, cropRect, outSize,
         progress(100)
 
 
-def generatePDF(fileName, inPage, cropRect, outSize,
-                pageLayout, trim=False, registrationMarks=False,
-                progress=None):
-    if isinstance(inPage, InputImage):
-        printer = QPrinter()
-        printer.setOutputFormat(QPrinter.PdfFormat)
-        printer.setOutputFileName(fileName)
-        printer.setColorMode(QPrinter.Color)
-        printer.setPageLayout(pageLayout)
-        printInputImage(printer, inPage, cropRect, outSize,
-                        trim, registrationMarks, progress)
-        return
-
+def generatePDFFromPDF(fileName, inPage, cropRect, outSize,
+                       pageLayout, trim=False, registrationMarks=False,
+                       progress=None):
+    assert isinstance(inPage, InputPDFPage)
     inReaderPage = inPage.getPyPDF2PageObject()
 
     overlayPage = None
@@ -332,23 +324,3 @@ class ThreadedOperation(QObject):
 
     def runInThread(self):
         QThreadPool.globalInstance().start(self._runnable)
-
-
-def PDFExportOperation(fileName, inPage, cropRect, outSize,
-                       pageSize, pageMargin, trim=False,
-                       registrationMarks=False, progress=None):
-    # Convert to a Qt page layout
-    pageSize = QPageSize(QSize(*pageSize))
-    pageMargin = QMarginsF(*pageMargin, *pageMargin)
-    pageLayout = QPageLayout(pageSize, QPageLayout.Portrait, pageMargin)
-
-    op = ThreadedOperation(generatePDF, fileName, inPage, cropRect,
-                           outSize, pageLayout, trim, registrationMarks)
-
-    if progress:
-        progress.setMaximum(100)
-        progress.setValue(0)
-        op.progress.connect(progress.setValue)
-        progress.canceled.connect(op.cancel)
-
-    return op

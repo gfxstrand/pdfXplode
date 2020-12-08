@@ -22,7 +22,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtPrintSupport import *
 from PyQt5.QtWidgets import *
 import os
-from outputPDF import PDFExportOperation, ThreadedOperation, printInputImage
+from outputPDF import ThreadedOperation, printInputImage
 import sys
 import tempfile
 from units import *
@@ -422,10 +422,6 @@ class MainWindow(QMainWindow):
         self.openAction = QAction(QIcon.fromTheme('document-open'), '&Open')
         self.openAction.triggered.connect(self.openFileDialog)
 
-        self.exportAction = QAction(QIcon.fromTheme('document-save'),
-                                    '&Save PDF')
-        self.exportAction.triggered.connect(self.exportFileDialog)
-
         self.printAction = QAction(QIcon.fromTheme('document-print'), '&Print')
         self.printAction.triggered.connect(self.printDialog)
 
@@ -502,11 +498,6 @@ class MainWindow(QMainWindow):
         self.overDraw.setChecked(False)
         formLayout.addWidget(self.overDraw)
 
-        self.saveButton = QPushButton('Save PDF')
-        self.saveButton.setIcon(QIcon.fromTheme('document-save'))
-        self.saveButton.clicked.connect(self.exportFileDialog)
-        formLayout.addWidget(self.saveButton)
-
         self.saveButton = QPushButton('Print')
         self.saveButton.setIcon(QIcon.fromTheme('document-print'))
         self.saveButton.clicked.connect(self.printDialog)
@@ -527,7 +518,6 @@ class MainWindow(QMainWindow):
         menuBar = self.menuBar()
         fileMenu = menuBar.addMenu('&File')
         fileMenu.addAction(self.openAction)
-        fileMenu.addAction(self.exportAction)
         fileMenu.addAction(self.printAction)
         fileMenu.addSeparator()
         fileMenu.addAction(self.quitAction)
@@ -586,27 +576,6 @@ class MainWindow(QMainWindow):
         self.preview.setInputPage(self.inputPage)
         self._updatePageSize()
 
-    def exportPDF(self, fileName):
-        progress = QProgressDialog(self)
-        progress.setLabelText("Saving exploded PDF...")
-        progress.setCancelButtonText("Cancel")
-        progress.setWindowModality(Qt.WindowModal)
-
-        export = PDFExportOperation(
-            fileName,
-            self.inputPage,
-            QRect(*self.cropOrig.values(), *self.cropDim.values()),
-            QSize(*self.scale.values()),
-            self.outPageSize.values(),
-            self.outPageMargin.values(),
-            trim=not self.overDraw.isChecked(),
-            registrationMarks=self.registrationMarks.isChecked(),
-            progress=progress)
-
-        progress.show()
-
-        export.runInThread()
-
     def openFileDialog(self):
         filters = 'PDF files (*.pdf);;Images (*.png *.jpg)'
         fname = QFileDialog.getOpenFileName(self, 'Open input file',
@@ -621,11 +590,6 @@ class MainWindow(QMainWindow):
             self.loadImage(fname[0])
         else:
             raise RuntimeError("Unknown file extension")
-
-    def exportFileDialog(self):
-        fname = QFileDialog.getSaveFileName(self, 'Export PDF', filter='*.pdf')
-        if fname and fname[0]:
-            self.exportPDF(fname[0])
 
     def printDialog(self):
         settings = QSettings()

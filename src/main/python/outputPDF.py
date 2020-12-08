@@ -127,6 +127,15 @@ def printOverlayPage(printer, trim=False, registrationMarks=False):
 def printInputImage(printer, inPage, cropRect, outSize,
                     trim=False, registrationMarks=False,
                     progress=None):
+    if printer.outputFormat() == QPrinter.PdfFormat and \
+       printer.outputFileName() and isinstance(inPage, InputPDFPage):
+        # In this case, we're outputting a PDF from another PDF.  We can
+        # output a higher quality PDF if we do it manually with PyPDF2.
+        printer.abort()
+        generatePDF(printer.outputFileName(), inPage, cropRect, outSize,
+                    printer.pageLayout(), trim, registrationMarks, progress)
+        return
+
     painter = _makePainter(printer)
 
     fullRect = printer.pageLayout().fullRectPoints()

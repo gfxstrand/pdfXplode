@@ -17,16 +17,8 @@ from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from inputPDF import InputPDFFile, InputPDFPage
 from inputImage import InputImage
 import math
-from PyQt5.QtCore import (
-    pyqtSignal,
-    Qt,
-    QPoint,
-    QRect,
-    QRectF,
-    QSize,
-    QThreadPool,
-)
-from PyQt5.QtGui import QBrush, QIcon, QPen, QPixmap, QTransform
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from PyQt5.QtPrintSupport import *
 from PyQt5.QtWidgets import *
 import os
@@ -378,6 +370,47 @@ class PreviewWidget(QGraphicsView):
         self.pageMargin = (width, height)
         self._updateRects()
 
+
+def loadPageLayout(settings, name, default):
+    pageSize = settings.value(name + '/page-size', None)
+    if not isinstance(pageSize, QSize):
+        return default
+    pageSize = QPageSize(pageSize)
+
+    orientation = settings.value(name + '/orientation', None)
+    try:
+        orientation = int(orientation)
+    except:
+        return default
+
+    margins = settings.value(name + '/margins', None)
+    if not isinstance(margins, QRectF):
+        return default
+    margins = QMarginsF(margins.x(), margins.y(),
+                        margins.width(), margins.height())
+
+    units = settings.value(name + '/units', None)
+    try:
+        units = int(units)
+    except:
+        return default
+
+    return QPageLayout(pageSize, orientation, margins, units)
+
+
+def savePageLayout(settings, name, layout):
+    settings.setValue(name + '/page-size', layout.pageSize().sizePoints())
+    settings.setValue(name + '/orientation', layout.orientation())
+
+    # Pretend the QMarginsF is a QRectF
+    margins = layout.margins()
+    margins = QRectF(margins.left(), margins.top(),
+                     margins.right(), margins.bottom())
+    settings.setValue(name + '/margins', margins)
+
+    settings.setValue(name + '/units', layout.units())
+
+
 class MainWindow(QMainWindow):
     def __init__(self, ctx, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -595,8 +628,18 @@ class MainWindow(QMainWindow):
             self.exportPDF(fname[0])
 
     def printDialog(self):
+        settings = QSettings()
+
         printer = QPrinter()
         printer.setColorMode(QPrinter.Color)
+
+        defaultPageLayout = QPageLayout(QPageSize(QPageSize.Letter),
+                                        QPageLayout.Portrait,
+                                        QMarginsF(0.5, 0.5, 0.5, 0.5),
+                                        QPageLayout.Inch)
+        pageLayout = loadPageLayout(settings, 'output/page-layout',
+                                    defaultPageLayout)
+        printer.setPageLayout(pageLayout)
 
         cropRect = QRect(*self.cropOrig.values(), *self.cropDim.values())
         outSize = QSize(*self.scale.values())
@@ -611,6 +654,8 @@ class MainWindow(QMainWindow):
         preview.paintRequested.connect(paintPreview)
         if preview.exec() == QDialog.Rejected:
             return
+
+        savePageLayout(settings, "output/page-layout", printer.pageLayout())
 
         progress = QProgressDialog(self)
         progress.setLabelText("Printing...")
@@ -629,6 +674,10 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     ctx = ApplicationContext()
+
+    QCoreApplication.setOrganizationName("jlekstrand.net");
+    QCoreApplication.setOrganizationDomain("jlekstrand.net");
+    QCoreApplication.setApplicationName("pdfXtract");
 
     menuBar = QMenuBar();
     openAct = QAction('&Open')

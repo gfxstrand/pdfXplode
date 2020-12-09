@@ -27,6 +27,7 @@ headers = [
   'src/InputPage.h',
   'src/print.h',
   'src/ScaledSpinBox.h',
+  'src/Unit.h',
 ]
 
 sources = [

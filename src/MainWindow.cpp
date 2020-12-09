@@ -31,7 +31,8 @@
 #define MILE_IN_POINTS (72 * 12 * 5280)
 
 MainWindow::MainWindow() :
-    QMainWindow(nullptr)
+    QMainWindow(nullptr),
+    _inPageNumber(0)
 {
     _openAction = new QAction(QIcon::fromTheme("document-open"),
                               "&Open", this);
@@ -73,7 +74,7 @@ MainWindow::MainWindow() :
     _pageNumber->setMinimum(1);
     _pageNumber->setMaximum(1);
     connect(_pageNumber, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &MainWindow::pageNumberChanged);
+            this, [=](int pageNumber){ this->setPageNumber(pageNumber - 1); });
     // Wrap it in a box
     {
         auto pageNumBox = new QGroupBox("Page Number", this);
@@ -149,27 +150,51 @@ MainWindow::loadImage(const QString &fileName)
     std::unique_ptr<InputImage> newImage(new InputImage(fileName));
     _pageNumber->setDisabled(true);
     _crop->setInputPage(newImage.get());
-    _inPage.reset(newImage.release());
+    _inPDF.reset();
+    _inPage = std::move(newImage);
     updatePageSize();
 }
 
 void
-MainWindow::pageNumberChanged(int pageNumber)
+MainWindow::loadPDF(const QString &fileName)
 {
-    if (pageNumber != 0)
-        throw std::runtime_error("Unimplemented");
+    _crop->setInputPage(nullptr);
+    _inPage.reset();
+    _inPDF.reset(new InputPDFFile(fileName));
+    _pageNumber->setDisabled(false);
+    _pageNumber->setMaximum(_inPDF->numPages());
+    setPageNumber(_pageNumber->value() - 1);
+}
+
+void
+MainWindow::setPageNumber(unsigned pageNumber)
+{
+    if (!_inPDF || pageNumber >= _inPDF->numPages())
+        return;
+
+    if (_inPage && _inPageNumber == pageNumber)
+        return;
+
+    std::unique_ptr<InputPage> newPage(_inPDF->getPage(pageNumber));
+    _crop->setInputPage(newPage.get());
+    _inPageNumber = pageNumber;
+    _inPage = std::move(newPage);
+    updatePageSize();
 }
 
 void
 MainWindow::openFileDialog()
 {
-    QString filters = "All supported files (*.png *.jpg)";
+    QString filters = "All supported files (*.png *.jpg, *.pdf)";
     filters += ";;Images (*.png *.jpg)";
+    filters += ";;PDF files (*.pdf)";
     QString fileName = QFileDialog::getOpenFileName(this, "Open input file",
                                                     "", filters);
     if (fileName.endsWith(".png", Qt::CaseInsensitive) ||
         fileName.endsWith(".jpg", Qt::CaseInsensitive))
         loadImage(fileName);
+    else if (fileName.endsWith(".pdf", Qt::CaseInsensitive))
+        loadPDF(fileName);
     else
         throw std::runtime_error("Unknown file extension");
 }

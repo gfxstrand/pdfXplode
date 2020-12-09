@@ -17,7 +17,7 @@
 #pragma once
 
 #include "CropWidget.h"
-#include "InputPage.h"
+#include "InputPDF.h"
 #include "Linked2DSpinBox.h"
 #include "UnitsComboBox.h"
 
@@ -37,9 +37,12 @@ public:
     virtual ~MainWindow();
 
     void loadImage(const QString &fileName);
+    void loadPDF(const QString &fileName);
+
+public slots:
+    void setPageNumber(unsigned pageNumber);
 
 private slots:
-    void pageNumberChanged(int pageNumber);
     void openFileDialog();
     void openPrintDialog();
 
@@ -51,7 +54,9 @@ private:
     QAction *_printAction;
     QAction *_quitAction;
 
+    std::unique_ptr<InputPDFFile> _inPDF;
     std::unique_ptr<InputPage> _inPage;
+    unsigned _inPageNumber;
 
     CropWidget *_crop;
     QSpinBox *_pageNumber;

@@ -21,11 +21,13 @@ project(
 
 qt5 = import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
+poppler_dep = dependency('poppler-qt5')
 
 headers = [
   'src/CropWidget.h',
   'src/InputImage.h',
   'src/InputPage.h',
+  'src/InputPDF.h',
   'src/Linked2DSpinBox.h',
   'src/MainWindow.h',
   'src/print.h',
@@ -38,6 +40,7 @@ sources = [
   'src/CropWidget.cpp',
   'src/InputImage.cpp',
   'src/InputPage.cpp',
+  'src/InputPDF.cpp',
   'src/Linked2DSpinBox.cpp',
   'src/main.cpp',
   'src/MainWindow.cpp',
@@ -53,4 +56,4 @@ moc_files = qt5.preprocess(moc_headers : headers,
 executable('pdfXplode', sources, moc_files,
            include_directories: inc,
            install : true,
-           dependencies : [qt5_dep])
+           dependencies : [qt5_dep, poppler_dep])

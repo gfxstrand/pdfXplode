@@ -20,17 +20,19 @@ project(
 )
 
 qt5 = import('qt5')
-qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets'])
+qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
 
 headers = [
   'src/InputImage.h',
   'src/InputPage.h',
+  'src/print.h',
 ]
 
 sources = [
   'src/InputImage.cpp',
   'src/InputPage.cpp',
-  'src/main.cpp'
+  'src/main.cpp',
+  'src/print.cpp',
 ]
 
 inc = include_directories('src')

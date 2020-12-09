@@ -72,7 +72,7 @@ CropWidget::reload()
         return;
 
     // We like 96 DPI
-    QSize pageSize = _inPage->sizeInNativeUnits();
+    QSize pageSize = _inPage->sizeInNativeUnit();
     QSize preferredSize = (pageSize * 96.0) / 72.0;
     _image = _inPage->getQImage(preferredSize);
     _pixmapItem = _scene->addPixmap(QPixmap::fromImage(_image));

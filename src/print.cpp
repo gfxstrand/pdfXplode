@@ -103,7 +103,7 @@ printInputPage(QPrinter *printer, const InputPage *inPage,
     int numPagesX = divRoundUp(outSize.width(), printWidth);
     int numPagesY = divRoundUp(outSize.height(), printHeight);
 
-    auto inPageSize = inPage->sizeInNativeUnits();
+    auto inPageSize = inPage->sizeInNativeUnit();
     auto imageSizeHint = QSize(
         (inPageSize.width() *
          painter.device()->physicalDpiX() *

@@ -24,7 +24,7 @@ InputImage::~InputImage()
 {}
 
 QSize
-InputImage::sizeInNativeUnits() const
+InputImage::sizeInNativeUnit() const
 {
     return qImage.size();
 }
@@ -33,4 +33,18 @@ QImage
 InputImage::getQImage(QSize sizeHint) const
 {
     return qImage;
+}
+
+Unit
+InputImage::nativeUnit() const
+{
+    return UNIT_PIXELS;
+}
+
+QList<Unit>
+InputImage::allowedUnits() const
+{
+    QList<Unit> list;
+    list.push_back(UNIT_PIXELS);
+    return list;
 }

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "Unit.h"
+
 #include <QtCore/QSize>
 #include <QtGui/QImage>
 
@@ -23,6 +25,8 @@ class InputPage
 {
 public:
     virtual ~InputPage();
-    virtual QSize sizeInNativeUnits() const = 0;
+    virtual QSize sizeInNativeUnit() const = 0;
     virtual QImage getQImage(QSize sizeHint = QSize(0, 0)) const = 0;
+    virtual Unit nativeUnit() const = 0;
+    virtual QList<Unit> allowedUnits() const = 0;
 };

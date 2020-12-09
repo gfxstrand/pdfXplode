@@ -18,6 +18,7 @@
 
 #include "InputPage.h"
 
+#include <QtCore/QList>
 #include <QtCore/QString>
 
 class InputImage : public InputPage
@@ -26,8 +27,11 @@ public:
     InputImage(const QString &fileName);
     virtual ~InputImage();
 
-    virtual QSize sizeInNativeUnits() const;
+    virtual QSize sizeInNativeUnit() const;
     virtual QImage getQImage(QSize sizeHint) const;
+
+    virtual Unit nativeUnit() const;
+    virtual QList<Unit> allowedUnits() const;
 
 private:
     QImage qImage;

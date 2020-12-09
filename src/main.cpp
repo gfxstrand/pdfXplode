@@ -16,14 +16,55 @@
 
 #include "MainWindow.h"
 
+#include <QtGui/QPageLayout>
 #include <QtWidgets/QApplication>
+
+QDataStream &operator<<(QDataStream &out, const QPageSize &pageSize)
+{
+    return out << pageSize.sizePoints();
+}
+
+QDataStream &operator>>(QDataStream &in, QPageSize &pageSize)
+{
+    QSize sizePoints;
+    in >> sizePoints;
+    pageSize = QPageSize(sizePoints);
+    return in;
+}
+
+QDataStream &operator<<(QDataStream &out, const QPageLayout &pageLayout)
+{
+    return out << pageLayout.pageSize()
+               << (int)pageLayout.orientation()
+               << pageLayout.margins()
+               << (int)pageLayout.units()
+               << pageLayout.minimumMargins();
+}
+
+QDataStream &operator>>(QDataStream &in, QPageLayout &pageLayout)
+{
+    QPageSize pageSize;
+    int orientation, units;
+    QMarginsF margins, minMargins;
+    in >> pageSize >> orientation >> margins >> units >> minMargins;
+    pageLayout = QPageLayout(pageSize, (QPageLayout::Orientation)orientation,
+                             margins, (QPageLayout::Unit)units, minMargins);
+    return in;
+}
 
 int
 main(int argc, char **argv)
 {
+    QCoreApplication::setOrganizationName("jlekstrand.net");
+    QCoreApplication::setOrganizationDomain("jlekstrand.net");
+    QCoreApplication::setApplicationName("pdfXtract");
+
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
     QApplication app(argc, argv);
+
+    qRegisterMetaTypeStreamOperators<QPageSize>("QPageSize");
+    qRegisterMetaTypeStreamOperators<QPageLayout>("QPageLayout");
 
     MainWindow window;
     window.show();

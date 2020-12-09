@@ -23,9 +23,13 @@ qt5 = import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets'])
 
 headers = [
+  'src/InputImage.h',
+  'src/InputPage.h',
 ]
 
 sources = [
+  'src/InputImage.cpp',
+  'src/InputPage.cpp',
   'src/main.cpp'
 ]
 

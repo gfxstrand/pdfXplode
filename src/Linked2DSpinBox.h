@@ -56,7 +56,7 @@ private slots:
     void yChanged(double y);
 
 signals:
-    void valueChanged(double x, double y);
+    void valueChanged(QSizeF val);
 
 private:
     void resetScale();

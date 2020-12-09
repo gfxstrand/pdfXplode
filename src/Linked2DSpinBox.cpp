@@ -144,7 +144,7 @@ Linked2DSpinBox::xChanged(double x)
         _updating = false;
     }
 
-    emit valueChanged(x, _ySpin->value());
+    emit valueChanged(QSizeF(x, _ySpin->value()));
 }
 
 void
@@ -159,7 +159,7 @@ Linked2DSpinBox::yChanged(double y)
         _updating = false;
     }
 
-    emit valueChanged(_xSpin->value(), y);
+    emit valueChanged(QSizeF(_xSpin->value(), y));
 }
 
 void

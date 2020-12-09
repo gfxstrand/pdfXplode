@@ -30,6 +30,7 @@ headers = [
   'src/print.h',
   'src/ScaledSpinBox.h',
   'src/Unit.h',
+  'src/UnitsComboBox.h',
 ]
 
 sources = [
@@ -40,6 +41,7 @@ sources = [
   'src/main.cpp',
   'src/print.cpp',
   'src/ScaledSpinBox.cpp',
+  'src/UnitsComboBox.cpp',
 ]
 
 inc = include_directories('src')

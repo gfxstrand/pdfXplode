@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <QtCore/QString>
+
 enum Unit
 {
     UNIT_NONE,
@@ -24,6 +26,18 @@ enum Unit
     UNIT_PIXELS,
     UNIT_POINTS,
 };
+
+inline QString
+getUnitString(Unit u)
+{
+    switch (u) {
+    case UNIT_INCHES:   return "inches";
+    case UNIT_PERCENT:  return "percent";
+    case UNIT_PIXELS:   return "pixels";
+    case UNIT_POINTS:   return "points";
+    default:            throw std::runtime_error("Invalid unit");
+    }
+}
 
 inline double
 getUnitConversionFactor(Unit a, Unit b)

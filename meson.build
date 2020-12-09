@@ -25,6 +25,7 @@ qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
 headers = [
   'src/InputImage.h',
   'src/InputPage.h',
+  'src/Linked2DSpinBox.h',
   'src/print.h',
   'src/ScaledSpinBox.h',
   'src/Unit.h',
@@ -33,6 +34,7 @@ headers = [
 sources = [
   'src/InputImage.cpp',
   'src/InputPage.cpp',
+  'src/Linked2DSpinBox.cpp',
   'src/main.cpp',
   'src/print.cpp',
   'src/ScaledSpinBox.cpp',

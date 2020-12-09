@@ -26,6 +26,7 @@ headers = [
   'src/InputImage.h',
   'src/InputPage.h',
   'src/print.h',
+  'src/ScaledSpinBox.h',
 ]
 
 sources = [
@@ -33,6 +34,7 @@ sources = [
   'src/InputPage.cpp',
   'src/main.cpp',
   'src/print.cpp',
+  'src/ScaledSpinBox.cpp',
 ]
 
 inc = include_directories('src')

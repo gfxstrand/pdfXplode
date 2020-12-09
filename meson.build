@@ -23,6 +23,7 @@ qt5 = import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
 
 headers = [
+  'src/CropWidget.h',
   'src/InputImage.h',
   'src/InputPage.h',
   'src/Linked2DSpinBox.h',
@@ -32,6 +33,7 @@ headers = [
 ]
 
 sources = [
+  'src/CropWidget.cpp',
   'src/InputImage.cpp',
   'src/InputPage.cpp',
   'src/Linked2DSpinBox.cpp',

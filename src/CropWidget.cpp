@@ -16,6 +16,8 @@
 
 #include "CropWidget.h"
 
+#include <QtGui/QScreen>
+#include <QtGui/QGuiApplication>
 #include <QtWidgets/QGraphicsPixmapItem>
 #include <QtWidgets/QGraphicsRectItem>
 
@@ -30,6 +32,18 @@ CropWidget::CropWidget(QWidget *parent) :
     _scene = new QGraphicsScene(this);
     _scene->setBackgroundBrush(QBrush(Qt::gray));
     setScene(_scene);
+
+    // If we really wanted to be 100% correct, we'd connect to the
+    // appropriate signal and handle screen add/remove.  However, that's
+    // probably way more complicated than we really need since the HiDPI
+    // screen is almost always the laptop panel which isn't going to be
+    // getting hot-plugged.
+    _devicePixelRatio = 1.0;
+    auto screens = QGuiApplication::screens();
+    for (auto screen : screens) {
+        if (_devicePixelRatio < screen->devicePixelRatio())
+            _devicePixelRatio = screen->devicePixelRatio();
+    }
 }
 
 CropWidget::~CropWidget()
@@ -73,7 +87,7 @@ CropWidget::reload()
 
     // We like 96 DPI
     QSize pageSize = _inPage->sizeInNativeUnit();
-    QSize preferredSize = (pageSize * 96.0) / 72.0;
+    QSize preferredSize = (pageSize * 96.0 * _devicePixelRatio) / 72.0;
     _image = _inPage->getQImage(preferredSize);
     _pixmapItem = _scene->addPixmap(QPixmap::fromImage(_image));
 

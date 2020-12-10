@@ -37,6 +37,8 @@ public slots:
 private:
     void reload();
 
+    double _devicePixelRatio;
+
     QGraphicsScene *_scene;
     InputPage *_inPage;
 

@@ -18,6 +18,8 @@
 
 #include "InputPage.h"
 
+#include <QtCore/QByteArray>
+
 #include <poppler-qt5.h>
 
 #include <memory>
@@ -37,7 +39,10 @@ public:
     unsigned numPages() const;
     InputPDFPage *getPage(unsigned pageNumber) const;
 
+    QByteArray rawBytes() const { return _bytes; }
+
 private:
+    QByteArray _bytes;
     std::unique_ptr<Poppler::Document> _doc;
 };
 

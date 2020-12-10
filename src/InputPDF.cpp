@@ -16,9 +16,19 @@
 
 #include "InputPDF.h"
 
+#include <QtCore/QFile>
+
 InputPDFFile::InputPDFFile(const QString &fileName)
 {
-    _doc.reset(Poppler::Document::load(fileName));
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly))
+        throw std::runtime_error("Failed to open PDF file");
+    _bytes = file.readAll();
+    if (_bytes.isEmpty())
+        throw std::runtime_error("Failed to load PDF file");
+    file.close();
+
+    _doc.reset(Poppler::Document::loadFromData(_bytes));
     if (!_doc || _doc->isLocked())
         throw std::runtime_error("Failed to load PDF file");
     _doc->setRenderHint(Poppler::Document::Antialiasing, true);

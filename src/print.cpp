@@ -17,6 +17,7 @@
 #include "print.h"
 
 #include "InputImage.h"
+#include "InputPDF.h"
 
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
@@ -169,5 +170,29 @@ testPrintImage(const QString &inFileName, const QString &outFileName,
     printer.setOutputFileName(outFileName);
 
     printInputPage(&printer, &inImage, cropRect, outSize,
+                   trim, registrationMarks);
+}
+
+void
+testPrintPDF(const QString &inFileName, unsigned inPageNumber,
+             const QString &outFileName,
+             const QRect &cropRect, const QSize &outSize,
+             bool trim, bool registrationMarks)
+{
+    std::unique_ptr<InputPDFFile> inPDF(new InputPDFFile(inFileName));
+    std::unique_ptr<InputPDFPage> inPage(inPDF->getPage(inPageNumber));
+
+    QPageLayout pageLayout(QPageSize(QPageSize::Letter),
+                           QPageLayout::Portrait,
+                           QMarginsF(0.5, 0.5, 0.5, 0.5),
+                           QPageLayout::Inch);
+
+    QPrinter printer;
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setPageLayout(pageLayout);
+    printer.setColorMode(QPrinter::Color);
+    printer.setOutputFileName(outFileName);
+
+    printInputPage(&printer, inPage.get(), cropRect, outSize,
                    trim, registrationMarks);
 }

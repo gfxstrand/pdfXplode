@@ -20,6 +20,11 @@
 
 #include <QtPrintSupport/QPrinter>
 
+void testGeneratePDF(const QString &inFileName, unsigned inPageNumber,
+                     const QString &outFileName,
+                     const QRect &cropRect, const QSize &outSize,
+                     bool trim = false, bool registrationMarks = false);
+
 void testPrintImage(const QString &inFileName, const QString &outFileName,
                     const QRect &cropRect, const QSize &outSize,
                     bool trim = false, bool registrationMarks = false);

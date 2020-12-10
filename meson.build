@@ -22,6 +22,7 @@ project(
 qt5 = import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
 poppler_dep = dependency('poppler-qt5')
+podofo_dep = dependency('libpodofo')
 
 headers = [
   'src/CropWidget.h',
@@ -56,4 +57,4 @@ moc_files = qt5.preprocess(moc_headers : headers,
 executable('pdfXplode', sources, moc_files,
            include_directories: inc,
            install : true,
-           dependencies : [qt5_dep, poppler_dep])
+           dependencies : [qt5_dep, poppler_dep, podofo_dep])

@@ -22,13 +22,15 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPen>
 
+#include <podofo.h>
+
 #include <stdexcept>
 
-void
-paintRegistrationMarks(QPrinter *printer, QPainter &painter)
+QList<QLine>
+getRegistrationMarkLines(QPageLayout pageLayout)
 {
-    auto page = printer->pageLayout().fullRectPoints();
-    auto margin = printer->pageLayout().marginsPoints();
+    auto page = pageLayout.fullRectPoints();
+    auto margin = pageLayout.marginsPoints();
 
     // Get ourselves some nice abbreviations
     unsigned pw = page.width();
@@ -42,6 +44,24 @@ paintRegistrationMarks(QPrinter *printer, QPainter &painter)
     // running into the main page area
     float cf = 0.9;
 
+    QList<QLine> lines;
+    lines.push_back(QLine(0, mt, ml * cf, mt));
+    lines.push_back(QLine(ml, 0, ml, mt * cf));
+    lines.push_back(QLine(pw, mt, pw - mr * cf, mt));
+    lines.push_back(QLine(pw - mr, 0, pw - mr, mt * cf));
+    lines.push_back(QLine(0, ph - mb, ml * cf, ph - mb));
+    lines.push_back(QLine(ml, ph, ml, ph - mb * cf));
+    lines.push_back(QLine(pw, ph - mb, pw - mr * cf, ph - mb));
+    lines.push_back(QLine(pw - mr, ph, pw - mr, ph - mb * cf));
+
+    return lines;
+}
+
+void
+paintRegistrationMarks(QPrinter *printer, QPainter &painter)
+{
+    auto lines = getRegistrationMarkLines(printer->pageLayout());
+
     QPen pen;
     pen.setStyle(Qt::SolidLine);
     pen.setWidth(1);
@@ -49,14 +69,8 @@ paintRegistrationMarks(QPrinter *printer, QPainter &painter)
 
     painter.save();
     painter.setPen(pen);
-    painter.drawLine(0, mt, ml * cf, mt);
-    painter.drawLine(ml, 0, ml, mt * cf);
-    painter.drawLine(pw, mt, pw - mr * cf, mt);
-    painter.drawLine(pw - mr, 0, pw - mr, mt * cf);
-    painter.drawLine(0, ph - mb, ml * cf, ph - mb);
-    painter.drawLine(ml, ph, ml, ph - mb * cf);
-    painter.drawLine(pw, ph - mb, pw - mr * cf, ph - mb);
-    painter.drawLine(pw - mr, ph, pw - mr, ph - mb * cf);
+    for (auto line : lines)
+        painter.drawLine(line);
     painter.restore();
 }
 
@@ -88,10 +102,106 @@ int divRoundUp(int n, int d)
 }
 
 void
+generatePDFFromPDF(QString outFileName, QPageLayout outPageLayout,
+                   const InputPDFPage *inPage,
+                   const QRect &cropRect, const QSize &outSize,
+                   bool trim, bool registrationMarks)
+{
+    auto fullRect = outPageLayout.fullRectPoints();
+    auto margin = outPageLayout.marginsPoints();
+
+    int printWidth = fullRect.width() - margin.left() - margin.right();
+    int printHeight = fullRect.height() - margin.top() - margin.bottom();
+
+    int numPagesX = divRoundUp(outSize.width(), printWidth);
+    int numPagesY = divRoundUp(outSize.height(), printHeight);
+
+    QByteArray inRawBytes = inPage->pdfFile()->rawBytes();
+    PoDoFo::PdfMemDocument inDoc;
+    inDoc.LoadFromBuffer(inRawBytes.constData(), inRawBytes.size());
+    inDoc.EmbedSubsetFonts();
+
+    PoDoFo::PdfMemDocument outDoc;
+    PoDoFo::PdfRect outPdfPageSize(0, 0, fullRect.width(), fullRect.height());
+
+    PoDoFo::PdfXObject inPageXObj(inDoc, inPage->pageNumber(), &outDoc);
+
+    for (int y = 0; y < numPagesY; y++) {
+        for (int x = 0; x < numPagesX; x++) {
+            PoDoFo::PdfPage *outPdfPage = outDoc.CreatePage(outPdfPageSize);
+            PoDoFo::PdfPainter painter;
+            painter.SetPage(outPdfPage);
+
+            double xt = x * printWidth;
+            double yt = y * printHeight;
+
+            // PDF coordinates start at the bottom-left but everything
+            // else is top-down so flip the Y transform
+            yt = outSize.height() - yt - printHeight;
+
+            QTransform xform;
+            xform.translate(margin.left(), margin.bottom());
+            xform.translate(-xt, -yt);
+            xform.scale(outSize.width() / (double)cropRect.width(),
+                        outSize.height() / (double)cropRect.height());
+            xform.translate(-cropRect.x(), -cropRect.y());
+
+            painter.Save();
+            assert(xform.isAffine() && xform.m12() == 0 && xform.m21() == 0);
+            painter.DrawXObject(xform.m31(), xform.m32(), &inPageXObj,
+                                xform.m11(), xform.m22());
+            painter.Restore();
+
+            if (trim) {
+                painter.SetGray(1.0);
+                // Remember!  Coordinates in PDFs start at the bottom-left
+                // and we don't have QPainter helping flip them around
+                painter.Rectangle(0, 0, margin.left(), fullRect.height());
+                painter.Rectangle(0, 0, fullRect.width(), margin.bottom());
+                painter.Rectangle(fullRect.width() - margin.right(), 0,
+                                  margin.right(), fullRect.height());
+                painter.Rectangle(0, fullRect.height() - margin.top(),
+                                  fullRect.width(), fullRect.height());
+                painter.Fill();
+            }
+
+            if (registrationMarks) {
+                painter.SetStrokeWidth(1.0);
+                painter.SetStrokingGray(0.0);
+
+                auto lines = getRegistrationMarkLines(outPageLayout);
+                for (auto line : lines) {
+                    // Remember!  Coordinates in PDFs start at the bottom-left
+                    // and we don't have QPainter helping flip them around
+                    painter.DrawLine(line.x1(), fullRect.height() - line.y1(),
+                                     line.x2(), fullRect.height() - line.y2());
+                }
+            }
+
+            painter.FinishPage();
+        }
+    }
+
+    outDoc.Write(outFileName.toUtf8().data());
+}
+
+void
 printInputPage(QPrinter *printer, const InputPage *inPage,
                const QRect &cropRect, const QSize &outSize,
                bool trim, bool registrationMarks)
 {
+    if (printer->outputFormat() == QPrinter::PdfFormat &&
+        !printer->outputFileName().isEmpty() &&
+        dynamic_cast<const InputPDFPage *>(inPage)) {
+        // In this case, we're outputting a PDF from another PDF.  We can
+        // output a higher quality PDF if we do it manually with PoDoFo.
+        printer->abort();
+        generatePDFFromPDF(printer->outputFileName(), printer->pageLayout(),
+                           dynamic_cast<const InputPDFPage *>(inPage),
+                           cropRect, outSize, trim, registrationMarks);
+        return;
+    }
+
     QPainter painter;
     setupPainter(printer, painter);
 
@@ -195,4 +305,22 @@ testPrintPDF(const QString &inFileName, unsigned inPageNumber,
 
     printInputPage(&printer, inPage.get(), cropRect, outSize,
                    trim, registrationMarks);
+}
+
+void
+testGeneratePDF(const QString &inFileName, unsigned inPageNumber,
+                const QString &outFileName,
+                const QRect &cropRect, const QSize &outSize,
+                bool trim, bool registrationMarks)
+{
+    std::unique_ptr<InputPDFFile> inPDF(new InputPDFFile(inFileName));
+    std::unique_ptr<InputPDFPage> inPage(inPDF->getPage(inPageNumber));
+
+    QPageLayout pageLayout(QPageSize(QPageSize::Letter),
+                           QPageLayout::Portrait,
+                           QMarginsF(0.5, 0.5, 0.5, 0.5),
+                           QPageLayout::Inch);
+
+    generatePDFFromPDF(outFileName, pageLayout, inPage.get(),
+                      cropRect, outSize, trim, registrationMarks);
 }

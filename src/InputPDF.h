@@ -58,6 +58,9 @@ public:
     virtual Unit nativeUnit() const;
     virtual QList<Unit> allowedUnits() const;
 
+    const InputPDFFile *pdfFile() const { return _file; }
+    unsigned pageNumber() const { return _pageNumber; }
+
 private:
     const InputPDFFile *_file;
     unsigned _pageNumber;

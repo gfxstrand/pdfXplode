@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import io
 import os
 import poppler
 import PyPDF2
@@ -99,15 +100,12 @@ class InputPDFPage(object):
 
 class InputPDFFile(object):
     def __init__(self, fileName):
-        # Make a copy of the file in a temporary directory.  This way we
-        # can reference it without worrying about the underlying file
-        # changing.
-        self.tmpDir = tempfile.TemporaryDirectory(prefix="pdfXplode-inPDF")
-        self.tmpFileName = os.path.join(self.tmpDir.name,
-                                        os.path.basename(fileName))
-        shutil.copyfile(fileName, self.tmpFileName)
+        # Read the entire file because we'll need to open it with multiple
+        # different PDF libraries
+        with open(fileName, 'rb') as f:
+            self.bytes = f.read()
 
-        self.doc = poppler.document.load_from_file(self.tmpFileName)
+        self.doc = poppler.document.load_from_data(self.bytes)
 
     def cleanup(self):
         self.tmpDir.cleanup()
@@ -122,4 +120,4 @@ class InputPDFFile(object):
         return InputPDFPage(self, pageNumber)
 
     def getPyPDF2Reader(self):
-        return PyPDF2.PdfFileReader(self.tmpFileName)
+        return PyPDF2.PdfFileReader(io.BytesIO(self.bytes))

@@ -298,7 +298,8 @@ class PreviewWidget(QGraphicsView):
             return
 
         # We like 96 DPI
-        preferredSize = (self.inputPage.getSize() * 96) / 72
+        preferredSize = (self.inputPage.getSize() *
+                         96 * self.devicePixelRatio()) / 72
         self.image = self.inputPage.getQImage(preferredSize)
         self.pixmap = self.scene.addPixmap(QPixmap.fromImage(self.image))
         pageSize = self.inputPage.getSize()
@@ -624,11 +625,14 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
-    ctx = ApplicationContext()
+    QCoreApplication.setOrganizationName("jlekstrand.net")
+    QCoreApplication.setOrganizationDomain("jlekstrand.net")
+    QCoreApplication.setApplicationName("pdfXtract")
 
-    QCoreApplication.setOrganizationName("jlekstrand.net");
-    QCoreApplication.setOrganizationDomain("jlekstrand.net");
-    QCoreApplication.setApplicationName("pdfXtract");
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+
+    ctx = ApplicationContext()
 
     menuBar = QMenuBar();
     openAct = QAction('&Open')

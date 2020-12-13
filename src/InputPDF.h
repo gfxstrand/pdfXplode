@@ -19,8 +19,10 @@
 #include "InputPage.h"
 
 #include <QtCore/QByteArray>
+#include <QtCore/QMap>
 
-#include <poppler-qt5.h>
+#include <cpp/poppler-document.h>
+#include <cpp/poppler-page.h>
 
 #include <memory>
 #include <mutex>
@@ -43,7 +45,7 @@ public:
 
 private:
     QByteArray _bytes;
-    std::unique_ptr<Poppler::Document> _doc;
+    std::unique_ptr<poppler::document> _doc;
 };
 
 class InputPDFPage : public InputPage
@@ -65,7 +67,7 @@ private:
     const InputPDFFile *_file;
     unsigned _pageNumber;
 
-    std::unique_ptr<Poppler::Page> _page;
+    std::unique_ptr<poppler::page> _page;
 
     mutable std::mutex _cacheMutex;
     mutable QMap<uint64_t, QImage> _qImageCache;

@@ -21,7 +21,7 @@ project(
 
 qt5 = import('qt5')
 qt5_dep = dependency('qt5', modules: ['Core', 'Gui', 'Widgets', 'PrintSupport'])
-poppler_dep = dependency('poppler-qt5')
+poppler_dep = dependency('poppler-cpp')
 podofo_dep = dependency('libpodofo')
 
 headers = [

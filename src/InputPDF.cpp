@@ -18,6 +18,26 @@
 
 #include <QtCore/QFile>
 
+#include <cpp/poppler-page-renderer.h>
+
+#include <cstring>
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+void
+memcpy2d(void *dst, int dst_stride,
+         const void *src, int src_stride,
+         int height)
+{
+    int min_stride = MIN(dst_stride, src_stride);
+    for (int y = 0; y < height; y++) {
+        std::memcpy((char *)dst + y * (size_t)dst_stride,
+                    (const char *)src + y * (size_t)src_stride,
+                    min_stride);
+    }
+}
+
 InputPDFFile::InputPDFFile(const QString &fileName)
 {
     QFile file(fileName);
@@ -28,12 +48,10 @@ InputPDFFile::InputPDFFile(const QString &fileName)
         throw std::runtime_error("Failed to load PDF file");
     file.close();
 
-    _doc.reset(Poppler::Document::loadFromData(_bytes));
-    if (!_doc || _doc->isLocked())
+    _doc.reset(poppler::document::load_from_raw_data(_bytes.constData(),
+                                                     _bytes.size()));
+    if (!_doc || _doc->is_locked())
         throw std::runtime_error("Failed to load PDF file");
-    _doc->setRenderHint(Poppler::Document::Antialiasing, true);
-    _doc->setRenderHint(Poppler::Document::TextAntialiasing, true);
-    _doc->setRenderHint(Poppler::Document::TextHinting, true);
 }
 
 InputPDFFile::~InputPDFFile()
@@ -42,7 +60,7 @@ InputPDFFile::~InputPDFFile()
 unsigned
 InputPDFFile::numPages() const
 {
-    return _doc->numPages();
+    return _doc->pages();
 }
 
 InputPDFPage *
@@ -59,7 +77,7 @@ InputPDFPage::InputPDFPage(const InputPDFFile *file, unsigned pageNumber) :
 {
     if (pageNumber >= file->numPages())
         throw std::runtime_error("Invalid page");
-    _page.reset(file->_doc->page(pageNumber));
+    _page.reset(file->_doc->create_page(pageNumber));
 }
 
 InputPDFPage::~InputPDFPage()
@@ -68,14 +86,32 @@ InputPDFPage::~InputPDFPage()
 QSize
 InputPDFPage::sizeInNativeUnit() const
 {
-    return _page->pageSize();
+    auto rect = _page->page_rect(poppler::media_box);
+    assert(rect.x() == 0 && rect.y() == 0);
+    return QSize(rect.width(), rect.height());
+}
+
+QImage::Format
+popplerToQImageFormat(poppler::image::format_enum popplerFormat)
+{
+    switch (popplerFormat) {
+    case poppler::image::format_invalid: return QImage::Format_Invalid;
+    case poppler::image::format_mono:    return QImage::Format_Mono;
+    case poppler::image::format_rgb24:   return QImage::Format_RGB888;
+    case poppler::image::format_argb32:  return QImage::Format_ARGB32;
+    case poppler::image::format_gray8:   return QImage::Format_Grayscale8;
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
+    case poppler::image::format_bgr24:   return QImage::Format_BGR888;
+#endif
+    default: throw std::runtime_error("Invalid format");
+    }
 }
 
 QImage
 InputPDFPage::getQImage(QSize sizeHint) const
 {
     if (sizeHint.isEmpty())
-        sizeHint = _page->pageSize();
+        sizeHint = sizeInNativeUnit();
 
     uint64_t cacheKey =
         static_cast<uint64_t>(sizeHint.width()) |
@@ -88,20 +124,32 @@ InputPDFPage::getQImage(QSize sizeHint) const
     if (!image.isNull())
         return image;
 
-    double xDpi = (sizeHint.width() * 72) / _page->pageSizeF().width();
-    double yDpi = (sizeHint.height() * 72) / _page->pageSizeF().height();
+    poppler::page_renderer renderer;
+    renderer.set_render_hint(poppler::page_renderer::antialiasing, true);
+    renderer.set_render_hint(poppler::page_renderer::text_antialiasing, true);
+    renderer.set_render_hint(poppler::page_renderer::text_hinting, true);
+
+    double xDpi = (sizeHint.width() * 72) / (double)sizeInNativeUnit().width();
+    double yDpi = (sizeHint.height() * 72) / (double)sizeInNativeUnit().height();
 
     while (xDpi > 1 && yDpi > 1) {
-        image = _page->renderToImage(xDpi, yDpi);
+        auto popplerImage = renderer.render_page(_page.get(), xDpi, yDpi);
 
-        // If we ask to render an image that's too large, it will return an
-        // empty 1x1 image.  Contrary to what the Poppler docs say, it does
-        // not return a null image
-        if (!image.isNull() && image.size() != QSize(1, 1))
-            break;
+        image = QImage(popplerImage.width(), popplerImage.height(),
+                       popplerToQImageFormat(popplerImage.format()));
 
-        xDpi /= 2;
-        yDpi /= 2;
+        // If our image is too large and allocaiton fails, we'll end up with
+        // a null image.
+        if (image.isNull()) {
+            xDpi /= 2;
+            yDpi /= 2;
+            continue;
+        }
+
+        memcpy2d(image.bits(), image.bytesPerLine(),
+                 popplerImage.data(), popplerImage.bytes_per_row(),
+                 popplerImage.height());
+        break;
     }
 
     lock.lock();

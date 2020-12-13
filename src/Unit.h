@@ -18,6 +18,8 @@
 
 #include <QtCore/QString>
 
+#include <stdexcept>
+
 enum Unit
 {
     UNIT_NONE,

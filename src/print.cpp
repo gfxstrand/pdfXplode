@@ -42,7 +42,7 @@ getRegistrationMarkLines(QPageLayout pageLayout)
 
     // A caution factor of 90% to keep our registration lines from
     // running into the main page area
-    float cf = 0.9;
+    float cf = 0.9f;
 
     QList<QLine> lines;
     lines.push_back(QLine(0, mt, ml * cf, mt));
@@ -83,7 +83,9 @@ setupPainter(QPrinter *printer, QPainter &painter)
     if (!painter.begin(printer))
         throw std::runtime_error("Failed to open printer, is it writable?");
 
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 13, 0))
     painter.setRenderHint(QPainter::LosslessImageRendering, true);
+#endif
 
     auto pageSizePoints = printer->pageLayout().fullRectPoints().size();
     auto pageSizeLogical = QSize(
